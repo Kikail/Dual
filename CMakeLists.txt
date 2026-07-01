@@ -12,6 +12,7 @@ set(SOURCES
         SDK/include/dual_internal.h
         SDK/src/dual_input.c
         SDK/src/dual_math.c
+        SDK/src/dual_graphics_2d.c
 )
 
 # 2. Création de l'exécutable
