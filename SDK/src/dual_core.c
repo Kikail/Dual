@@ -143,25 +143,42 @@ void DUAL_BeginFrame(DUAL_App* app) {
 
     /* Calcul lissé des FPS */
     app->fps_timer += app->delta_time;
-    app->fps_counter++;
+    app->fps_counter += 1;
     if (app->fps_timer >= 1.0) {
         app->fps_current = app->fps_counter;
         app->fps_counter = 0;
         app->fps_timer   = 0.0;
     }
+
+    // ─── RENDU ÉCRAN DU HAUT (VERT) ───
+    DUAL_SetActiveScreen(app, DUAL_SCREEN_TOP);
+    glClearColor(0.1f, 0.6f, 0.2f, 1.0f); // Vert sapin
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // ─── RENDU ÉCRAN DU BAS (BLEU) ───
+    DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);
+    glClearColor(0.1f, 0.3f, 0.6f, 1.0f); // Bleu océan
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    //DUAL_Log(DUAL_LOG_DEBUG, "FPS: %d", app->fps_current);
 }
 
 void DUAL_SetActiveScreen(DUAL_App* app, DUAL_ScreenID screen) {
     if (!app) return;
 
-    /* Hack magique de découpage OpenGL (N'oublie pas d'ajouter les includes de gl.h / glad.h plus tard) */
-    /* Pour l'instant, on prépare les coordonnées géométriques du Viewport */
+    // 1. On active le mode "Scissor Test" dans OpenGL.
+    // Cela force OpenGL à ne colorer QUE la zone découpée, sinon glClear colorie toute la fenêtre.
+    glEnable(GL_SCISSOR_TEST);
+
     if (screen == DUAL_SCREEN_TOP) {
-        // En haut : le Y commence à la moitié de la hauteur virtuelle totale
-        // Équivalent à : glViewport(0, app->hauteur_ecran, app->largeur_ecran, app->hauteur_ecran);
-    } else if (screen == DUAL_SCREEN_BOTTOM) {
-        // En bas : le Y commence à 0
-        // Équivalent à : glViewport(0, 0, app->largeur_ecran, app->hauteur_ecran);
+        // Écran du HAUT : la zone commence à Y = hauteur_ecran
+        glViewport(0, app->hauteur_ecran, app->largeur_ecran, app->hauteur_ecran);
+        glScissor(0, app->hauteur_ecran, app->largeur_ecran, app->hauteur_ecran);
+    }
+    else if (screen == DUAL_SCREEN_BOTTOM) {
+        // Écran du BAS : la zone commence à Y = 0
+        glViewport(0, 0, app->largeur_ecran, app->hauteur_ecran);
+        glScissor(0, 0, app->largeur_ecran, app->hauteur_ecran);
     }
 }
 
@@ -209,4 +226,19 @@ void DUAL_Log(DUAL_LogLevel niveau, const char* format, ...) {
     va_end(args);
 
     printf("\n");
+}
+
+/* ============================================================================
+ * Utility
+ * ========================================================================== */
+
+void* DUAL_Internal_GetGLFWWindow(const DUAL_App* app) {
+    return app ? app->window : NULL;
+}
+
+void DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h) {
+    if (app) {
+        if (out_w) *out_w = app->largeur_ecran;
+        if (out_h) *out_h = app->hauteur_ecran;
+    }
 }

@@ -9,6 +9,8 @@ set(SOURCES
         SDK/src/dual_core.c
         SDK/thirdparty/glad/glad.c
         Jeux/Testing/main.c
+        SDK/include/dual_internal.h
+        SDK/src/dual_input.c
 )
 
 # 2. Création de l'exécutable
