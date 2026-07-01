@@ -11,6 +11,7 @@ set(SOURCES
         Jeux/Testing/main.c
         SDK/include/dual_internal.h
         SDK/src/dual_input.c
+        SDK/src/dual_math.c
 )
 
 # 2. Création de l'exécutable
