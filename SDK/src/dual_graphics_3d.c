@@ -32,11 +32,13 @@ struct DUAL_Model {
     GLuint   vao, vbo, ebo;
     uint32_t index_count;
     DUAL_AABB bounding_box_local;
+    DUAL_ResourceHandle* handle;
 };
 
 struct DUAL_Material {
     DUAL_Texture* texture_diffuse; /* Non possédée : voir DUAL_Material_Destroy */
     float         brillance;       /* Réservé à un futur shader éclairé (voir plus bas) */
+    DUAL_ResourceHandle* handle;
 };
 
 struct DUAL_Renderer3D {
@@ -139,8 +141,6 @@ static void ApplyCullMode3D(DUAL_CullMode mode) {
  * ========================================================================== */
 
 DUAL_Result DUAL_Model_LoadFromOBJ(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model) {
-    (void)resources; /* Utilisé plus tard si tu implémentes un tracker de VRAM personnalisé */
-
     if (!chemin_fichier || !out_model) return DUAL_ERROR_INVALID_ARG;
 
     /* aiProcess_FlipUVs : DUAL_Texture_LoadFromFile (dual_graphics_2d.c) charge
@@ -179,9 +179,21 @@ DUAL_Result DUAL_Model_LoadFromOBJ(DUAL_ResourceManager* resources, const char* 
      * Un premier passage de comptage permet une seule allocation. */
     uint32_t total_vertices = 0;
     uint32_t total_indices  = 0;
-    for (unsigned int m = 0; m < nombre_meshes; m++) {
+    for (unsigned int m = 0; m < scene->mNumMeshes; m++) {
         total_vertices += scene->mMeshes[m]->mNumVertices;
-        total_indices  += scene->mMeshes[m]->mNumFaces * 3; /* aiProcess_Triangulate garantit des triangles */
+        total_indices  += scene->mMeshes[m]->mNumFaces * 3;
+    }
+
+    // Calcul de la taille requise en VRAM
+    uint64_t taille_vram = ((uint64_t)total_vertices * sizeof(Vertex3D)) + ((uint64_t)total_indices * sizeof(uint32_t));
+    DUAL_ResourceHandle* model_handle = NULL;
+
+    if (resources) {
+        DUAL_Result res = DUAL_ResourceManager_Track(resources, DUAL_MEMORY_VRAM, DUAL_RESOURCE_MODEL_3D, taille_vram, chemin_fichier, &model_handle);
+        if (res != DUAL_OK) {
+            aiReleaseImport(scene);
+            return res;
+        }
     }
 
     Vertex3D* vertices = (Vertex3D*)malloc(sizeof(Vertex3D) * total_vertices);
@@ -245,14 +257,20 @@ DUAL_Result DUAL_Model_LoadFromOBJ(DUAL_ResourceManager* resources, const char* 
 
     DUAL_Model* model = (DUAL_Model*)malloc(sizeof(struct DUAL_Model));
     if (!model) {
-        free(vertices);
-        free(indices);
+        free(vertices); free(indices); aiReleaseImport(scene);
+        if (resources && model_handle) DUAL_ResourceManager_Untrack(resources, model_handle);
         return DUAL_ERROR_OUT_OF_MEMORY;
     }
 
     model->index_count = index_cursor;
     model->bounding_box_local.min = bb_min;
     model->bounding_box_local.max = bb_max;
+    model->handle = model_handle;
+
+    if (resources && model_handle) {
+        extern void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void* ptr, void (*cb)(DUAL_ResourceManager*, void*));
+        DUAL_Internal_ResourceHandle_SetCallback(model_handle, model, (void(*)(DUAL_ResourceManager*, void*))DUAL_Model_Destroy);
+    }
 
     glGenVertexArrays(1, &model->vao);
     glGenBuffers(1, &model->vbo);
@@ -285,11 +303,13 @@ DUAL_Result DUAL_Model_LoadFromOBJ(DUAL_ResourceManager* resources, const char* 
 }
 
 void DUAL_Model_Destroy(DUAL_ResourceManager* resources, DUAL_Model* model) {
-    (void)resources;
     if (model) {
         glDeleteVertexArrays(1, &model->vao);
         glDeleteBuffers(1, &model->vbo);
         glDeleteBuffers(1, &model->ebo);
+        if (resources && model->handle) {
+            DUAL_ResourceManager_Untrack(resources, model->handle);
+        }
         free(model);
     }
 }
@@ -305,24 +325,42 @@ DUAL_AABB DUAL_Model_GetBoundingBox(const DUAL_Model* model) {
  * ========================================================================== */
 
 DUAL_Result DUAL_Material_Create(DUAL_ResourceManager* resources, DUAL_Texture* texture_diffuse, DUAL_Material** out_material) {
-    (void)resources;
     if (!out_material) return DUAL_ERROR_INVALID_ARG;
 
+    uint64_t taille_ram = sizeof(struct DUAL_Material);
+    DUAL_ResourceHandle* mat_handle = NULL;
+
+    if (resources) {
+        DUAL_Result res = DUAL_ResourceManager_Track(resources, DUAL_MEMORY_RAM, DUAL_RESOURCE_AUTRE, taille_ram, "Material_3D", &mat_handle);
+        if (res != DUAL_OK) return res;
+    }
+
     DUAL_Material* mat = (DUAL_Material*)malloc(sizeof(struct DUAL_Material));
-    if (!mat) return DUAL_ERROR_OUT_OF_MEMORY;
+    if (!mat) {
+        if (resources && mat_handle) DUAL_ResourceManager_Untrack(resources, mat_handle);
+        return DUAL_ERROR_OUT_OF_MEMORY;
+    }
 
     mat->texture_diffuse = texture_diffuse;
-    mat->brillance = 32.0f; /* Valeur par défaut raisonnable ; inutilisée par le shader unlit actuel */
+    mat->brillance = 32.0f;
+    mat->handle = mat_handle;
+
+    if (resources && mat_handle) {
+        extern void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void* ptr, void (*cb)(DUAL_ResourceManager*, void*));
+        DUAL_Internal_ResourceHandle_SetCallback(mat_handle, mat, (void(*)(DUAL_ResourceManager*, void*))DUAL_Material_Destroy);
+    }
 
     *out_material = mat;
     return DUAL_OK;
 }
 
 void DUAL_Material_Destroy(DUAL_ResourceManager* resources, DUAL_Material* material) {
-    (void)resources;
-    /* Ne libère PAS material->texture_diffuse : voir doc du header, la texture
-     * est gérée séparément par l'appelant via DUAL_Texture_Destroy(). */
-    if (material) free(material);
+    if (material) {
+        if (resources && material->handle) {
+            DUAL_ResourceManager_Untrack(resources, material->handle);
+        }
+        free(material);
+    }
 }
 
 void DUAL_Material_SetShininess(DUAL_Material* material, float brillance) {

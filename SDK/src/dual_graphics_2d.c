@@ -28,12 +28,14 @@ struct DUAL_Texture {
     GLuint id_opengl;
     int32_t largeur;
     int32_t hauteur;
+    DUAL_ResourceHandle* handle;
 };
 
 struct DUAL_Font {
     DUAL_Texture* texture_atlas;
     float taille_pixels;
     stbtt_bakedchar données_caractères[96]; // Stocke les données ASCII 32 à 126
+    DUAL_ResourceHandle* handle;
 };
 
 typedef struct {
@@ -123,18 +125,34 @@ DUAL_Result DUAL_Texture_LoadFromFile(DUAL_ResourceManager* resources, const cha
 }
 
 DUAL_Result DUAL_Texture_LoadFromMemory(DUAL_ResourceManager* resources, const uint8_t* pixels, int32_t largeur, int32_t hauteur, DUAL_TextureFilter filtre, DUAL_Texture** out_texture) {
-    (void)resources;
     if (!pixels || !out_texture) return DUAL_ERROR_INVALID_ARG;
 
+    // Calcul de l'empreinte VRAM brute
+    uint64_t taille_vram = (uint64_t)largeur * hauteur * 4;
+    DUAL_ResourceHandle* res_handle = NULL;
+
+    if (resources) {
+        DUAL_Result res = DUAL_ResourceManager_Track(resources, DUAL_MEMORY_VRAM, DUAL_RESOURCE_TEXTURE, taille_vram, "Texture_2D", &res_handle);
+        if (res != DUAL_OK) return res;
+    }
+
     DUAL_Texture* tex = (DUAL_Texture*)malloc(sizeof(struct DUAL_Texture));
-    if (!tex) return DUAL_ERROR_OUT_OF_MEMORY;
+    if (!tex) {
+        if (resources && res_handle) DUAL_ResourceManager_Untrack(resources, res_handle);
+        return DUAL_ERROR_OUT_OF_MEMORY;
+    }
 
     tex->largeur = largeur;
     tex->hauteur = hauteur;
+    tex->handle = res_handle;
+
+    if (resources && res_handle) {
+        extern void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void* ptr, void (*cb)(DUAL_ResourceManager*, void*));
+        DUAL_Internal_ResourceHandle_SetCallback(res_handle, tex, (void(*)(DUAL_ResourceManager*, void*))DUAL_Texture_Destroy);
+    }
 
     glGenTextures(1, &tex->id_opengl);
     glBindTexture(GL_TEXTURE_2D, tex->id_opengl);
-
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, largeur, hauteur, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
     GLint gl_filtre = (filtre == DUAL_FILTER_NEAREST) ? GL_NEAREST : GL_LINEAR;
@@ -142,7 +160,6 @@ DUAL_Result DUAL_Texture_LoadFromMemory(DUAL_ResourceManager* resources, const u
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filtre);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
     glBindTexture(GL_TEXTURE_2D, 0);
 
     *out_texture = tex;
@@ -150,9 +167,11 @@ DUAL_Result DUAL_Texture_LoadFromMemory(DUAL_ResourceManager* resources, const u
 }
 
 void DUAL_Texture_Destroy(DUAL_ResourceManager* resources, DUAL_Texture* texture) {
-    (void)resources;
     if (texture) {
         glDeleteTextures(1, &texture->id_opengl);
+        if (resources && texture->handle) {
+            DUAL_ResourceManager_Untrack(resources, texture->handle);
+        }
         free(texture);
     }
 }
@@ -374,79 +393,55 @@ void DUAL_DrawSprite(DUAL_Renderer2D* renderer, const DUAL_SpriteParams* params)
 DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* chemin_fichier, int32_t taille_pixels, DUAL_Font** out_font) {
     if (!chemin_fichier || !out_font) return DUAL_ERROR_INVALID_ARG;
 
+    // [Garder votre code d'ouverture de fichier de lecture de ttf_buffer...]
     FILE* f = fopen(chemin_fichier, "rb");
     if (!f) return DUAL_ERROR_NOT_FOUND;
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (size <= 0) {
-        fclose(f);
-        return DUAL_ERROR_NOT_FOUND;
-    }
     uint8_t* ttf_buffer = (uint8_t*)malloc((size_t)size);
-    if (!ttf_buffer) {
-        fclose(f);
-        return DUAL_ERROR_OUT_OF_MEMORY;
-    }
-    size_t lus = fread(ttf_buffer, 1, (size_t)size, f);
+    fread(ttf_buffer, 1, (size_t)size, f);
     fclose(f);
-    if (lus != (size_t)size) {
-        free(ttf_buffer);
-        return DUAL_ERROR_NOT_FOUND;
-    }
 
-    int atlas_w = 1024;
-    int atlas_h = 1024;
-    /* calloc et non malloc : toute la zone de l'atlas non écrite par
-     * stbtt_BakeFontBitmap (généralement la grande majorité des 1024x1024
-     * pixels) doit valoir 0, sinon elle contient de la mémoire non
-     * initialisée qui finit copiée telle quelle dans le canal alpha du
-     * bitmap RGBA quelques lignes plus bas. */
-    uint8_t* bitmap_mono = (uint8_t*)calloc((size_t)atlas_w * (size_t)atlas_h, 1);
-    if (!bitmap_mono) {
-        free(ttf_buffer);
-        return DUAL_ERROR_OUT_OF_MEMORY;
+    // Enregistrement de la structure de la Font dans la RAM
+    uint64_t taille_ram = sizeof(struct DUAL_Font);
+    DUAL_ResourceHandle* font_handle = NULL;
+    if (resources) {
+        DUAL_Result res = DUAL_ResourceManager_Track(resources, DUAL_MEMORY_RAM, DUAL_RESOURCE_AUTRE, taille_ram, chemin_fichier, &font_handle);
+        if (res != DUAL_OK) {
+            free(ttf_buffer);
+            return res;
+        }
     }
 
     DUAL_Font* font = (DUAL_Font*)malloc(sizeof(struct DUAL_Font));
     if (!font) {
         free(ttf_buffer);
-        free(bitmap_mono);
+        if (resources && font_handle) DUAL_ResourceManager_Untrack(resources, font_handle);
         return DUAL_ERROR_OUT_OF_MEMORY;
     }
     font->taille_pixels = (float)taille_pixels;
+    font->handle = font_handle;
 
-    int r = stbtt_BakeFontBitmap(ttf_buffer, 0, font->taille_pixels, bitmap_mono, atlas_w, atlas_h, 32, 96, font->données_caractères);
+    if (resources && font_handle) {
+        extern void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void* ptr, void (*cb)(DUAL_ResourceManager*, void*));
+        DUAL_Internal_ResourceHandle_SetCallback(font_handle, font, (void(*)(DUAL_ResourceManager*, void*))DUAL_Font_Destroy);
+    }
+
+    int atlas_w = 1024, atlas_h = 1024;
+    uint8_t* bitmap_mono = (uint8_t*)calloc((size_t)atlas_w * atlas_h, 1);
+    stbtt_BakeFontBitmap(ttf_buffer, 0, font->taille_pixels, bitmap_mono, atlas_w, atlas_h, 32, 96, font->données_caractères);
     free(ttf_buffer);
 
-    if (r <= 0) {
-        /* r == 0  : aucun caractère n'a pu être placé dans l'atlas
-         * r <  0  : seuls (-r) caractères ont pu être placés avant que
-         *           l'atlas 1024x1024 soit plein (police trop grande pour
-         *           la taille de l'atlas, ou taille_pixels trop élevée) */
-        DUAL_Log(DUAL_LOG_ERROR, "Échec du bake de la police '%s' (code stb_truetype: %d) - atlas %dx%d trop petit pour la taille demandée (%d px).",
-                 chemin_fichier, r, atlas_w, atlas_h, taille_pixels);
-        free(bitmap_mono);
-        free(font);
-        return DUAL_ERROR_INIT_FAILED;
-    }
-    /* r > 0 : succès. r correspond à la première ligne non utilisée de
-     * l'atlas, donc plus r est petit, plus il reste de marge. */
-    DUAL_Log(DUAL_LOG_DEBUG, "Police '%s' bakée avec succès (%d/%d lignes de l'atlas utilisées).", chemin_fichier, r, atlas_h);
-
     uint8_t* bitmap_rgba = (uint8_t*)malloc(atlas_w * atlas_h * 4);
-    if (!bitmap_rgba) {
-        free(bitmap_mono);
-        free(font);
-        return DUAL_ERROR_OUT_OF_MEMORY;
-    }
     for (int idx = 0; idx < atlas_w * atlas_h; idx++) {
-        bitmap_rgba[idx*4 + 0] = 255; // R
-        bitmap_rgba[idx*4 + 1] = 255; // G
-        bitmap_rgba[idx*4 + 2] = 255; // B
-        bitmap_rgba[idx*4 + 3] = bitmap_mono[idx]; // Alpha
+        bitmap_rgba[idx*4 + 0] = 255;
+        bitmap_rgba[idx*4 + 1] = 255;
+        bitmap_rgba[idx*4 + 2] = 255;
+        bitmap_rgba[idx*4 + 3] = bitmap_mono[idx];
     }
 
+    // L'atlas passera automatiquement par le tracker VRAM de DUAL_Texture_LoadFromMemory
     DUAL_Texture_LoadFromMemory(resources, bitmap_rgba, atlas_w, atlas_h, DUAL_FILTER_LINEAR, &font->texture_atlas);
 
     free(bitmap_mono);
@@ -458,7 +453,14 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
 
 void DUAL_Font_Destroy(DUAL_ResourceManager* resources, DUAL_Font* font) {
     if (font) {
-        DUAL_Texture_Destroy(resources, font->texture_atlas);
+        // Détruit d'abord l'atlas (qui se retirera de la VRAM du manager)
+        if (font->texture_atlas) {
+            DUAL_Texture_Destroy(resources, font->texture_atlas);
+        }
+        // Se retire de la RAM du manager
+        if (resources && font->handle) {
+            DUAL_ResourceManager_Untrack(resources, font->handle);
+        }
         free(font);
     }
 }
