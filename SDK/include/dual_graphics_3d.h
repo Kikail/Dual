@@ -58,6 +58,14 @@ typedef enum DUAL_LightType {
 } DUAL_LightType;
 
 /**
+ * @brief Type de projection dans un espace 3D.
+ */
+typedef enum DUAL_ProjectionMode3D {
+    DUAL_PROJECTION_PERSPECTIVE = 0, /**< Projection perspective ( effet de profondeur ) */
+    DUAL_PROJECTION_ORTHOGRAPHIC = 1 /**< Projection orthographique ( profondeur non observable ) */
+}DUAL_ProjectionMode3D;
+
+/**
  * @brief Mode de culling des faces appliqué lors du rendu d'un modèle.
  */
 typedef enum DUAL_CullMode {

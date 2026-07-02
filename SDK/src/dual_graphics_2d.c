@@ -164,6 +164,14 @@ void DUAL_Texture_GetSize(const DUAL_Texture* texture, int32_t* out_largeur, int
     }
 }
 
+/* Accesseur interne : DUAL_Texture est opaque en dehors de ce fichier, mais
+ * dual_graphics_3d.c a besoin de l'id OpenGL pour binder la texture diffuse
+ * d'un DUAL_Material. Même pattern que DUAL_Internal_GetGLFWWindow entre
+ * dual_core.c et dual_input.c. */
+GLuint DUAL_Internal_GetTextureID(const DUAL_Texture* texture) {
+    return texture ? texture->id_opengl : 0;
+}
+
 /* ============================================================================
  * RENDU GENERAL ET BATCHING
  * ========================================================================== */
@@ -257,6 +265,12 @@ void DUAL_Renderer2D_Begin(DUAL_Renderer2D* renderer) {
     if (renderer) {
         renderer->vertex_count = 0;
         renderer->texture_courante = NULL;
+        /* Défensif : le module 2D ne doit jamais dépendre du fait qu'un autre
+         * module (dual_graphics_3d.c notamment) ait bien désactivé le culling
+         * en sortie. Les quads 2D sont enroulés dans le sens horaire en espace
+         * écran ; si GL_CULL_FACE restait actif ici, ils seraient tous éliminés
+         * silencieusement (aucun sprite/texte visible). */
+        glDisable(GL_CULL_FACE);
     }
 }
 

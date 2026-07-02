@@ -2,9 +2,12 @@
 #include <stdlib.h>
 
 /* Inclusion des modules de libdual */
+#include <math.h>
+
 #include "dual_core.h"
 #include "dual_math.h"
 #include "dual_graphics_2d.h"
+#include "dual_graphics_3d.h"
 
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
@@ -17,8 +20,8 @@ int main(int argc, char** argv) {
     // Configuration de l'application selon ton dual_core.h
     DUAL_AppConfig config = {
         .titre_fenetre = "Test libdual - Double Écran",
-        .largeur_ecran = 400, // Résolution standard type console portable
-        .hauteur_ecran = 240,
+        .largeur_ecran = 400 * 2, // Résolution standard type console portable
+        .hauteur_ecran = 240 * 2,
         .plein_ecran = false,
         .vsync_actif = true,
         .fps_cible = 60
@@ -30,7 +33,7 @@ int main(int argc, char** argv) {
     }
 
     /* ========================================================================
-     * 2. Initialisation du rendu 2D
+     * 2.1 Initialisation du rendu 2D
      * ====================================================================== */
     DUAL_Renderer2D* renderer = NULL;
     if (DUAL_Renderer2D_Create(app, &renderer) != DUAL_OK) {
@@ -40,17 +43,45 @@ int main(int argc, char** argv) {
     }
 
     /* ========================================================================
+     * 2.2 Initialisation du rendu 3D
+     * ====================================================================== */
+    DUAL_Renderer3D* renderer3D = NULL;
+    if (DUAL_Renderer3D_Create(app, &renderer3D) != DUAL_OK) {
+        DUAL_Log(DUAL_LOG_ERROR, "Impossible d'initialiser le Renderer 3D.");
+        DUAL_Shutdown(app);
+        return -1;
+    }
+
+    /* ========================================================================
      * 3. Chargement des ressources (Assets)
      * ====================================================================== */
     DUAL_Texture* texture_logo = NULL;
+    DUAL_Texture* image = NULL;
     DUAL_Font* police = NULL;
+    DUAL_Material* material = NULL;
+    DUAL_Model* model = NULL;
+    DUAL_Transform3D transform = {
+        {0.0,0.0,-5.0},
+        {0.0,0.0,0.0},
+        {1.0,1.0,1.0}
+    };
 
-    // Chemins absolus conservés comme demandés
+    // Chargment des ressources
     DUAL_Texture_LoadFromFile(NULL, "/home/killian/CLionProjects/Dual/assets/logo.png", DUAL_FILTER_LINEAR, &texture_logo);
-    DUAL_Font_LoadFromFile(NULL, "/home/killian/CLionProjects/Dual/assets/arial.ttf", 16, &police);
-
-    printf("Police : %p\n", (void*)police);
-    printf("Texture atlas : %p\n", (void*)police);
+    DUAL_Texture_LoadFromFile(NULL, "/home/killian/CLionProjects/Dual/assets/image.png", DUAL_FILTER_LINEAR, &image);
+    DUAL_Font_LoadFromFile(NULL, "/home/killian/CLionProjects/Dual/assets/arial.ttf", 20, &police);
+    DUAL_Result r = DUAL_Material_Create(NULL, image, &material);
+    if (r != DUAL_OK) {
+        DUAL_Log(DUAL_LOG_ERROR, "Impossible de charger le material.");
+        DUAL_Shutdown(app);
+        return -1;
+    }
+    r = DUAL_Model_LoadFromOBJ(NULL, "/home/killian/CLionProjects/Dual/assets/model.obj", &model);
+    if (r != DUAL_OK) {
+        DUAL_Log(DUAL_LOG_ERROR, "Impossible de charger le model.");
+        DUAL_Shutdown(app);
+        return -1;
+    }
 
     int tex_w = 0, tex_h = 0;
     if (texture_logo) {
@@ -86,10 +117,12 @@ int main(int argc, char** argv) {
         // --- RENDU ---
         DUAL_BeginFrame(app);
 
+
         // --- RENDU ÉCRAN SUPÉRIEUR ---
         DUAL_SetActiveScreen(app, DUAL_SCREEN_TOP);
-        DUAL_Renderer2D_Begin(renderer);
 
+        // --- RENDU 2D ---
+        DUAL_Renderer2D_Begin(renderer);
         if (texture_logo) {
             DUAL_SpriteParams params = {0};
             params.texture = texture_logo;
@@ -121,6 +154,16 @@ int main(int argc, char** argv) {
         }
         DUAL_Renderer2D_End(renderer);
 
+        // --- RENDU 3D ---
+        DUAL_Renderer3D_Begin(renderer3D);
+
+        transform.rotation_euler_radians.x += DUAL_GetDeltaTime(app);
+        transform.rotation_euler_radians.y += DUAL_GetDeltaTime(app) * 2;
+        transform.position.z = -sin(DUAL_GetTime(app)) * 2.5 - 7.5;
+        DUAL_DrawModel(renderer3D, model, material, transform);
+
+        DUAL_Renderer3D_End(renderer3D);
+
         DUAL_EndFrame(app);
     }
 
@@ -133,6 +176,7 @@ int main(int argc, char** argv) {
     if (texture_logo) DUAL_Texture_Destroy(NULL, texture_logo);
 
     DUAL_Renderer2D_Destroy(renderer);
+    DUAL_Renderer3D_Destroy(renderer3D);
     DUAL_Shutdown(app);
 
     return 0;

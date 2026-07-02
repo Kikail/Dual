@@ -13,6 +13,7 @@ set(SOURCES
         SDK/src/dual_input.c
         SDK/src/dual_math.c
         SDK/src/dual_graphics_2d.c
+        SDK/src/dual_graphics_3d.c
 )
 
 # 2. Création de l'exécutable
@@ -26,7 +27,8 @@ target_include_directories(Dual PRIVATE
 
 # 4. Dépendances système
 find_package(PkgConfig REQUIRED)
+find_package(assimp REQUIRED)
 pkg_check_modules(GLFW REQUIRED glfw3)
 find_package(OpenGL REQUIRED)
 
-target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} OpenGL::GL m pthread dl)
+target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
