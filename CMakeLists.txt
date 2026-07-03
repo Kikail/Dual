@@ -15,6 +15,7 @@ set(SOURCES
         SDK/src/dual_graphics_2d.c
         SDK/src/dual_graphics_3d.c
         SDK/src/dual_resources.c
+        SDK/src/dual_audio.c
 )
 
 # 2. Création de l'exécutable

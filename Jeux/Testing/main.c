@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "dual_audio.h"
 #include "dual_core.h"
 #include "dual_math.h"
 #include "dual_graphics_2d.h"
@@ -60,6 +61,30 @@ int main(int argc, char** argv) {
     DUAL_Font_LoadFromFile(resources, "/home/killian/CLionProjects/Dual/assets/arial.ttf", 20, &police);
     DUAL_Material_Create(resources, image, &material);
     DUAL_Model_LoadFromOBJ(resources, "/home/killian/CLionProjects/Dual/assets/model.obj", &model);
+
+    // 1. Initialisation du moteur audio
+    DUAL_AudioManager* audio = NULL;
+    if (DUAL_AudioManager_Create(app, &audio) != 0) {
+        printf("Erreur: Impossible d'initialiser l'audio.\n");
+        return -1;
+    }
+
+    // 2. Chargement des ressources
+    DUAL_Music* music_level1 = NULL;
+    DUAL_Sound* sfx_jump = NULL;
+
+    // Musique (streaming MP3/OGG)
+    DUAL_Music_OpenFromFile(audio, resources, "/home/killian/CLionProjects/Dual/assets/music.mp3", &music_level1);
+
+    // 3. Réglage des volumes globaux
+    DUAL_AudioManager_SetChannelVolume(audio, DUAL_CHANNEL_MASTER, 1.0f); // 100%
+    DUAL_AudioManager_SetChannelVolume(audio, DUAL_CHANNEL_MUSIC, 0.5f);  // Musique à 50%
+    DUAL_AudioManager_SetChannelVolume(audio, DUAL_CHANNEL_SFX, 1.0f);    // Bruitages à 100%
+
+    // 4. Lancement de la musique en boucle
+    if (music_level1) {
+        DUAL_Music_Play(audio, music_level1, true); // true = boucle
+    }
 
     int tex_w = 0, tex_h = 0;
     if (texture_logo) DUAL_Texture_GetSize(texture_logo, &tex_w, &tex_h);
