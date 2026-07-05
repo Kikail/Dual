@@ -16,10 +16,14 @@ set(SOURCES
         SDK/src/dual_graphics_3d.c
         SDK/src/dual_resources.c
         SDK/src/dual_audio.c
+        SDK/src/dual_fs.c
+        SDK/include/game_api.h
 )
 
 # 2. Création de l'exécutable
 add_executable(Dual ${SOURCES})
+
+target_compile_definitions(Dual PRIVATE ASSETS_DIR="Jeux/Jeu1/assets")
 
 # 3. Association DIRECTE et absolue du dossier include à l'exécutable Dual
 target_include_directories(Dual PRIVATE

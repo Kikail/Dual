@@ -1,6 +1,4 @@
 #include "dual_core.h"
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -8,7 +6,7 @@
 /* ============================================================================
  * Définition de la structure opaque (Invisible pour le dev final)
  * ========================================================================== */
-struct DUAL_App {
+typedef struct DUAL_App {
     GLFWwindow* window;         /* Le handle de la fenêtre de test PC */
     int32_t     largeur_ecran;   /* Largeur d'UN écran logique */
     int32_t     hauteur_ecran;   /* Hauteur d'UN écran logique */
@@ -23,7 +21,7 @@ struct DUAL_App {
     double      fps_timer;
     int32_t     fps_counter;
     int32_t     fps_current;
-};
+}DUAL_App;
 
 /* ============================================================================
  * Cycle de vie de l'application
@@ -69,6 +67,7 @@ DUAL_Result DUAL_Init(const DUAL_AppConfig* config, DUAL_App** out_app) {
     }
 
     glfwMakeContextCurrent(app->window);
+    glfwSetInputMode(app->window, GLFW_STICKY_KEYS, GLFW_TRUE);
 
     /* INITIALISATION DE GLAD */
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
@@ -226,6 +225,10 @@ void DUAL_Log(DUAL_LogLevel niveau, const char* format, ...) {
     va_end(args);
 
     printf("\n");
+}
+
+GLFWwindow* DUAL_GetWindow(const DUAL_App* app) {
+    return app ? app->window : NULL;
 }
 
 /* ============================================================================

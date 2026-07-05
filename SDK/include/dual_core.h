@@ -17,6 +17,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -201,6 +203,8 @@ double DUAL_GetTime(const DUAL_App* app);
  * @return Valeur de FPS courante.
  */
 int32_t DUAL_GetFPS(const DUAL_App* app);
+
+GLFWwindow* DUAL_GetWindow(const DUAL_App* app);
 
 /* ============================================================================
  *  Logging
