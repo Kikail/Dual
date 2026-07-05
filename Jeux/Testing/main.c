@@ -45,6 +45,11 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+    DUAL_InputManager* inputManager = NULL;
+    if (DUAL_InputManager_Create(app, &inputManager) != DUAL_OK) {
+        DUAL_Log(DUAL_LOG_ERROR, "Impossible d'initialiser l'inputManager.");
+        return -1;
+    }
 
     DUAL_ResourceManager* resources = NULL;
     if (DUAL_ResourceManager_Create(app, &resources) != DUAL_OK) {
@@ -74,6 +79,7 @@ int main(int argc, char** argv) {
 
     while (DUAL_ShouldRun(app)) {
         DUAL_BeginFrame(app);
+        DUAL_InputManager_Update(inputManager);
 
         if (glfwGetKey(DUAL_GetWindow(app), GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             break;
@@ -81,39 +87,60 @@ int main(int argc, char** argv) {
 
         if (EstCartoucheInseree(chemin_cartouche)) {
             if (!carteLue) {
-                DUAL_Log(DUAL_LOG_INFO,"Carte inseree");
+                DUAL_Log(DUAL_LOG_INFO, "Carte inseree !");
                 carteLue = true;
 
-                // 1. Chargement de la cartouche
-                void* handle = dlopen("./game.so", RTLD_LAZY);
+                // A. On configure le SDK pour chercher les fichiers sur la clé USB
+                // Au lieu de "cartridge_data/", on lui donne le chemin de la clé
+                DUAL_FS_SetCartridgeRoot(chemin_cartouche);
+
+                // B. On construit le chemin dynamique vers le fichier game.so sur la clé
+                char chemin_so[512];
+                snprintf(chemin_so, sizeof(chemin_so), "%s/game.so", chemin_cartouche);
+
+                // C. On charge le .so depuis la clé USB
+                void* handle = dlopen(chemin_so, RTLD_LAZY);
                 if (handle == NULL) {
-                    DUAL_Log(DUAL_LOG_ERROR, "Impossible d'initialiser le jeu.");
+                    DUAL_Log(DUAL_LOG_ERROR, "Impossible de charger le jeu depuis la cle USB.");
+                    DUAL_Log(DUAL_LOG_ERROR, dlerror()); // Affiche l'erreur système exacte si ça rate
                 }
                 else {
                     void (*get_api)(GameAPI*) = dlsym(handle, "get_game_api");
                     get_api(&game);
                     if (game.initialized)
-                        game.init(app, resources, renderer, renderer3D, audio);
+                        game.init(app, resources, renderer, renderer3D, audio, inputManager);
+                    DUAL_MemoryStats stats;
+                    DUAL_ResourceManager_GetStats(resources, &stats);
+                    DUAL_Log(DUAL_LOG_INFO, "Etat de la memoire: [%u/%u]", stats.vram_utilisee_octets, stats.vram_totale_octets);
                 }
             }
         }
         else {
             if (carteLue) {
                 DUAL_Log(DUAL_LOG_INFO,"Carte retiree");
+                game.initialized = false;
                 carteLue = false;
+                DUAL_AudioManager_SetChannelVolume(audio, DUAL_CHANNEL_MASTER, 0.0f);
+                DUAL_ResourceManager_PurgeAll(resources);
+                DUAL_MemoryStats stats;
+                DUAL_ResourceManager_GetStats(resources, &stats);
+                DUAL_Log(DUAL_LOG_INFO, "Etat de la memoire: [%u/%u]", stats.vram_utilisee_octets, stats.vram_totale_octets);
             }
         }
 
         if (game.initialized)
-            game.update(DUAL_GetDeltaTime(app),app, resources, renderer, renderer3D, audio);
+            game.update(DUAL_GetDeltaTime(app),app, resources, renderer, renderer3D, audio, inputManager);
+
+        if (game.initialized)
+            game.draw(app, resources, renderer, renderer3D, audio, inputManager);
 
         DUAL_EndFrame(app);
     }
 
     if (game.initialized)
-        game.shutdown(app, resources, renderer, renderer3D, audio);
+        game.shutdown(app, resources, renderer, renderer3D, audio, inputManager);
 
-
+    DUAL_InputManager_Destroy(inputManager);
     DUAL_ResourceManager_Destroy(resources);
     DUAL_Renderer2D_Destroy(renderer);
     DUAL_Renderer3D_Destroy(renderer3D);
