@@ -74,6 +74,25 @@ void DUAL_ResourceManager_Destroy(DUAL_ResourceManager* manager) {
     free(manager);
 }
 
+void DUAL_ResourceManager_PurgeAll(DUAL_ResourceManager* manager) {
+    if (!manager) return;
+
+    // Libère toutes les ressources encore suivies automatiquement
+    DUAL_ResourceHandle* current = manager->head;
+    while (current != NULL) {
+        DUAL_ResourceHandle* next = current->next;
+
+        if (current->callback_destruction && current->ptr_ressource) {
+            // Le callback appellera en interne DUAL_XXX_Destroy qui déclenchera Untrack
+            current->callback_destruction(manager, current->ptr_ressource);
+        } else {
+            if (current->nom_debug) free(current->nom_debug);
+            free(current);
+        }
+        current = next;
+    }
+}
+
 DUAL_Result DUAL_ResourceManager_Track(DUAL_ResourceManager* manager,
                                         DUAL_MemoryType type,
                                         DUAL_ResourceCategory categorie,

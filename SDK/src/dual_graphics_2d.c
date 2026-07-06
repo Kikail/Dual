@@ -106,8 +106,6 @@ static GLuint CompileShader(GLenum type, const char* source) {
  * ========================================================================== */
 
 DUAL_Result DUAL_Texture_LoadFromFile(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_TextureFilter filtre, DUAL_Texture** out_texture) {
-    (void)resources; // Utilisé plus tard si tu implémentes un tracker de VRAM personnalisé
-
     int largeur, hauteur, canaux;
 
     // CORRECTION : Pas de retournement vertical pour harmoniser avec le texte
@@ -358,21 +356,6 @@ void DUAL_DrawSprite(DUAL_Renderer2D* renderer, const DUAL_SpriteParams* params)
     float u1 = (params->rect_source.x + ((params->rect_source.largeur > 0) ? params->rect_source.largeur : params->texture->largeur)) / params->texture->largeur;
     float v1 = (params->rect_source.y + ((params->rect_source.hauteur > 0) ? params->rect_source.hauteur : params->texture->hauteur)) / params->texture->hauteur;
 
-    /* Pas d'inversion ici : les textures (sprites via stb_image ET atlas de
-     * police via stb_truetype) sont TOUTES chargées sans retournement
-     * vertical (voir DUAL_Texture_LoadFromFile plus haut), et ce moteur
-     * utilise un repère écran Y-vers-le-bas (voir DUAL_Mat4_Ortho dans
-     * FlushBatch : haut=0, bas=hauteur_ecran). Avec cette combinaison,
-     * v = y_source / hauteur_texture est DÉJÀ la bonne formule.
-     * L'ancienne ligne "v0 = 1.0f - v0; v1 = 1.0f - v1;" inversait ce
-     * résultat : chaque glyphe (et le sprite du logo) allait échantillonner
-     * une zone de la texture totalement différente de celle voulue — pour
-     * le texte en particulier, comme les 96 caractères sont bakés tout en
-     * haut de l'atlas 1024x1024, l'inversion les envoyait lire la toute fin
-     * de l'atlas, une zone jamais écrite par stb_truetype. D'où un texte
-     * illisible (voire invisible) et, accessoirement, un logo affiché à
-     * l'envers. */
-
     // Ajout des 2 triangles (6 sommets) au buffer linéaire
     uint32_t i = renderer->vertex_count;
     renderer->vertex_buffer[i++] = (Vertex2D){ p0, {u0, v0}, params->teinte };
@@ -393,15 +376,22 @@ void DUAL_DrawSprite(DUAL_Renderer2D* renderer, const DUAL_SpriteParams* params)
 DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* chemin_fichier, int32_t taille_pixels, DUAL_Font** out_font) {
     if (!chemin_fichier || !out_font) return DUAL_ERROR_INVALID_ARG;
 
-    // [Garder votre code d'ouverture de fichier de lecture de ttf_buffer...]
     FILE* f = fopen(chemin_fichier, "rb");
     if (!f) return DUAL_ERROR_NOT_FOUND;
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
     uint8_t* ttf_buffer = (uint8_t*)malloc((size_t)size);
-    fread(ttf_buffer, 1, (size_t)size, f);
+    if (!ttf_buffer) {
+        fclose(f);
+        return DUAL_ERROR_OUT_OF_MEMORY;
+    }
+    size_t read_bytes = fread(ttf_buffer, 1, (size_t)size, f);
     fclose(f);
+    if (read_bytes < (size_t)size) {
+        free(ttf_buffer);
+        return DUAL_ERROR_INIT_FAILED;
+    }
 
     // Enregistrement de la structure de la Font dans la RAM
     uint64_t taille_ram = sizeof(struct DUAL_Font);
@@ -422,6 +412,7 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
     }
     font->taille_pixels = (float)taille_pixels;
     font->handle = font_handle;
+    font->texture_atlas = NULL;
 
     if (resources && font_handle) {
         extern void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void* ptr, void (*cb)(DUAL_ResourceManager*, void*));
@@ -430,10 +421,22 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
 
     int atlas_w = 1024, atlas_h = 1024;
     uint8_t* bitmap_mono = (uint8_t*)calloc((size_t)atlas_w * atlas_h, 1);
+    if (!bitmap_mono) {
+        free(ttf_buffer);
+        if (resources && font_handle) DUAL_ResourceManager_Untrack(resources, font_handle);
+        free(font);
+        return DUAL_ERROR_OUT_OF_MEMORY;
+    }
     stbtt_BakeFontBitmap(ttf_buffer, 0, font->taille_pixels, bitmap_mono, atlas_w, atlas_h, 32, 96, font->données_caractères);
     free(ttf_buffer);
 
-    uint8_t* bitmap_rgba = (uint8_t*)malloc(atlas_w * atlas_h * 4);
+    uint8_t* bitmap_rgba = (uint8_t*)malloc((size_t)atlas_w * atlas_h * 4);
+    if (!bitmap_rgba) {
+        free(bitmap_mono);
+        if (resources && font_handle) DUAL_ResourceManager_Untrack(resources, font_handle);
+        free(font);
+        return DUAL_ERROR_OUT_OF_MEMORY;
+    }
     for (int idx = 0; idx < atlas_w * atlas_h; idx++) {
         bitmap_rgba[idx*4 + 0] = 255;
         bitmap_rgba[idx*4 + 1] = 255;
@@ -442,10 +445,16 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
     }
 
     // L'atlas passera automatiquement par le tracker VRAM de DUAL_Texture_LoadFromMemory
-    DUAL_Texture_LoadFromMemory(resources, bitmap_rgba, atlas_w, atlas_h, DUAL_FILTER_LINEAR, &font->texture_atlas);
+    DUAL_Result res_tex = DUAL_Texture_LoadFromMemory(resources, bitmap_rgba, atlas_w, atlas_h, DUAL_FILTER_LINEAR, &font->texture_atlas);
 
     free(bitmap_mono);
     free(bitmap_rgba);
+
+    if (res_tex != DUAL_OK) {
+        if (resources && font_handle) DUAL_ResourceManager_Untrack(resources, font_handle);
+        free(font);
+        return res_tex;
+    }
 
     *out_font = font;
     return DUAL_OK;
@@ -453,11 +462,7 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
 
 void DUAL_Font_Destroy(DUAL_ResourceManager* resources, DUAL_Font* font) {
     if (font) {
-        // Détruit d'abord l'atlas (qui se retirera de la VRAM du manager)
-        if (font->texture_atlas) {
-            DUAL_Texture_Destroy(resources, font->texture_atlas);
-        }
-        // Se retire de la RAM du manager
+
         if (resources && font->handle) {
             DUAL_ResourceManager_Untrack(resources, font->handle);
         }

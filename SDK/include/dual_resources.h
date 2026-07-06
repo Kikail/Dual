@@ -182,6 +182,8 @@ void DUAL_ResourceManager_SetRAMBudget(DUAL_ResourceManager* manager, uint64_t l
  */
 void DUAL_ResourceManager_PurgeCategory(DUAL_ResourceManager* manager, DUAL_ResourceCategory categorie);
 
+void DUAL_ResourceManager_PurgeAll(DUAL_ResourceManager* manager);
+
 #ifdef __cplusplus
 }
 #endif

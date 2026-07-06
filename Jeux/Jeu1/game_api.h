@@ -13,6 +13,7 @@ typedef struct DUAL_AudioManager DUAL_AudioManager;
 typedef struct DUAL_InputManager DUAL_InputManager;
 
 #define INCLUDES_FONCTIONS DUAL_App* app, DUAL_ResourceManager* resourceManager, DUAL_Renderer2D* renderer2D, DUAL_Renderer3D* renderer3D, DUAL_AudioManager* audioManager, DUAL_InputManager* inputManager
+#define PARAMS_FONCTIONS app, resourceManager, renderer2D, renderer3D, audioManager, inputManager
 
 // Définition de l'API
 typedef struct {

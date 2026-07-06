@@ -118,10 +118,17 @@ int main(int argc, char** argv) {
         else {
             if (carteLue) {
                 DUAL_Log(DUAL_LOG_INFO,"Carte retiree");
+
+                if (game.initialized) {
+                    game.shutdown(app, resources, renderer, renderer3D, audio, inputManager);
+                }
+
                 game.initialized = false;
                 carteLue = false;
+
                 DUAL_AudioManager_SetChannelVolume(audio, DUAL_CHANNEL_MASTER, 0.0f);
                 DUAL_ResourceManager_PurgeAll(resources);
+
                 DUAL_MemoryStats stats;
                 DUAL_ResourceManager_GetStats(resources, &stats);
                 DUAL_Log(DUAL_LOG_INFO, "Etat de la memoire: [%u/%u]", stats.vram_utilisee_octets, stats.vram_totale_octets);
@@ -137,8 +144,10 @@ int main(int argc, char** argv) {
         DUAL_EndFrame(app);
     }
 
-    if (game.initialized)
+    if (game.initialized) {
         game.shutdown(app, resources, renderer, renderer3D, audio, inputManager);
+        game.initialized = false;
+    }
 
     DUAL_InputManager_Destroy(inputManager);
     DUAL_ResourceManager_Destroy(resources);

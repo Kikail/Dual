@@ -202,6 +202,7 @@ DUAL_Result DUAL_Model_LoadFromOBJ(DUAL_ResourceManager* resources, const char* 
         free(vertices);
         free(indices);
         aiReleaseImport(scene);
+        if (resources && model_handle) DUAL_ResourceManager_Untrack(resources, model_handle);
         return DUAL_ERROR_OUT_OF_MEMORY;
     }
 
@@ -257,7 +258,7 @@ DUAL_Result DUAL_Model_LoadFromOBJ(DUAL_ResourceManager* resources, const char* 
 
     DUAL_Model* model = (DUAL_Model*)malloc(sizeof(struct DUAL_Model));
     if (!model) {
-        free(vertices); free(indices); aiReleaseImport(scene);
+        free(vertices); free(indices);
         if (resources && model_handle) DUAL_ResourceManager_Untrack(resources, model_handle);
         return DUAL_ERROR_OUT_OF_MEMORY;
     }

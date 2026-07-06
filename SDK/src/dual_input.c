@@ -51,13 +51,21 @@ DUAL_Result DUAL_InputManager_Create(DUAL_App* app, DUAL_InputManager** out_inpu
         input->previous_buttons[i] = false;
     }
 
-    /* MAPPING CLAVIER PC PAR DÉFAUT (Ajustable selon tes préférences) */
+    /* MAPPING CLAVIER PC PAR DÉFAUT (Ajustable selon tes préférences)
+     *
+     * IMPORTANT : le stick analogique (simulé plus bas par ZQSD) réserve les
+     * touches Z, Q, S et D. Ces 4 touches ne doivent JAMAIS être également
+     * assignées à un bouton ci-dessous : une touche utilisée pour les deux
+     * déclencherait le bouton en même temps que le déplacement du stick, ce
+     * qui donne l'impression que le bouton reste enfoncé en boucle pendant
+     * qu'on se déplace. C'était le cas de X (sur S), Y (sur D) et R (sur Z)
+     * dans une version précédente : ils ont été déplacés ci-dessous. */
     input->mapping_clavier[DUAL_BUTTON_A]      = GLFW_KEY_X;           /* X pour valider */
     input->mapping_clavier[DUAL_BUTTON_B]      = GLFW_KEY_C;           /* C pour annuler */
-    input->mapping_clavier[DUAL_BUTTON_X]      = GLFW_KEY_S;
-    input->mapping_clavier[DUAL_BUTTON_Y]      = GLFW_KEY_D;
-    input->mapping_clavier[DUAL_BUTTON_L]      = GLFW_KEY_A;           /* Gâchettes sur QWERTY/AZERTY hauts */
-    input->mapping_clavier[DUAL_BUTTON_R]      = GLFW_KEY_Z;
+    input->mapping_clavier[DUAL_BUTTON_X]      = GLFW_KEY_V;           /* Anciennement S : entrait en conflit avec le stick */
+    input->mapping_clavier[DUAL_BUTTON_Y]      = GLFW_KEY_B;           /* Anciennement D : entrait en conflit avec le stick */
+    input->mapping_clavier[DUAL_BUTTON_L]      = GLFW_KEY_A;           /* Gâchettes en haut à gauche/droite du stick */
+    input->mapping_clavier[DUAL_BUTTON_R]      = GLFW_KEY_E;           /* Anciennement Z : entrait en conflit avec le stick */
     input->mapping_clavier[DUAL_BUTTON_START]  = GLFW_KEY_ENTER;
     input->mapping_clavier[DUAL_BUTTON_SELECT] = GLFW_KEY_RIGHT_SHIFT;
     input->mapping_clavier[DUAL_BUTTON_UP]     = GLFW_KEY_UP;          /* Croix directionnelle */
@@ -86,6 +94,18 @@ void DUAL_InputManager_Destroy(DUAL_InputManager* input) {
 
 void DUAL_InputManager_Update(DUAL_InputManager* input) {
     if (!input || !input->window) return;
+
+    /* 0. RAFRAÎCHISSEMENT DE L'ÉTAT GLFW
+     *
+     * glfwGetKey()/glfwGetMouseButton() ne renvoient l'état réel du matériel
+     * que si la file d'événements GLFW a été traitée récemment. Si l'appli
+     * appelle déjà glfwPollEvents() ailleurs (typiquement dans
+     * DUAL_BeginFrame()), cet appel est un simple no-op sans effet de bord
+     * néfaste. En revanche, si ce n'est pas le cas, son absence est la cause
+     * la plus fréquente d'un état de touche qui semble "figé" (donc lu comme
+     * enfoncé en continu) : ce module ne doit pas dépendre d'un appel externe
+     * pour fonctionner correctement. */
+    glfwPollEvents();
 
     /* 1. MISE À JOUR DES BOUTONS PHYSIQUES */
     for (int i = 0; i < DUAL_BUTTON_COUNT; i++) {
@@ -159,17 +179,21 @@ void DUAL_InputManager_Update(DUAL_InputManager* input) {
  * ========================================================================== */
 
 bool DUAL_IsButtonDown(const DUAL_InputManager* input, DUAL_Button bouton) {
-    if (!input || bouton < 0 || bouton >= DUAL_BUTTON_COUNT) return false;
+    /* (int) force une comparaison signée : selon le compilateur, un enum dont
+     * toutes les valeurs sont positives peut être représenté par un type non
+     * signé, ce qui rendrait "bouton < 0" toujours faux et masquerait un appel
+     * invalide (ex: cast direct d'un -1). */
+    if (!input || (int)bouton < 0 || bouton >= DUAL_BUTTON_COUNT) return false;
     return input->current_buttons[bouton];
 }
 
 bool DUAL_IsButtonPressed(const DUAL_InputManager* input, DUAL_Button bouton) {
-    if (!input || bouton < 0 || bouton >= DUAL_BUTTON_COUNT) return false;
+    if (!input || (int)bouton < 0 || bouton >= DUAL_BUTTON_COUNT) return false;
     return (input->current_buttons[bouton] && !input->previous_buttons[bouton]);
 }
 
 bool DUAL_IsButtonReleased(const DUAL_InputManager* input, DUAL_Button bouton) {
-    if (!input || bouton < 0 || bouton >= DUAL_BUTTON_COUNT) return false;
+    if (!input || (int)bouton < 0 || bouton >= DUAL_BUTTON_COUNT) return false;
     return (!input->current_buttons[bouton] && input->previous_buttons[bouton]);
 }
 
