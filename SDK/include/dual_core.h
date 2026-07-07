@@ -20,6 +20,8 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
+#include "dual_math.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -172,6 +174,9 @@ void DUAL_SetActiveScreen(DUAL_App* app, DUAL_ScreenID screen);
  * @param app Instance de l'application.
  */
 void DUAL_EndFrame(DUAL_App* app);
+
+void DUAL_SetScreenTopClearColor(DUAL_App* app, DUAL_Vec4 clearColor);
+void DUAL_SetScreenBottomClearColor(DUAL_App* app, DUAL_Vec4 clearColor);
 
 /* ============================================================================
  *  Timing

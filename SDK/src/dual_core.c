@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
+#include "dual_math.h"
+
 /* ============================================================================
  * Définition de la structure opaque (Invisible pour le dev final)
  * ========================================================================== */
@@ -21,6 +23,9 @@ typedef struct DUAL_App {
     double      fps_timer;
     int32_t     fps_counter;
     int32_t     fps_current;
+
+    DUAL_Vec4 screenTopClearColor;
+    DUAL_Vec4 screenBottomClearColor;
 }DUAL_App;
 
 /* ============================================================================
@@ -100,6 +105,10 @@ DUAL_Result DUAL_Init(const DUAL_AppConfig* config, DUAL_App** out_app) {
     *out_app = app;
 
     DUAL_Log(DUAL_LOG_INFO, "Système Dual initialisé avec succès (%dx%d par écran).", app->largeur_ecran, app->hauteur_ecran);
+
+    app->screenTopClearColor = (DUAL_Vec4){0.1f, 0.6f, 0.2f, 1.0f};
+    app->screenBottomClearColor = (DUAL_Vec4){0.1f, 0.3f, 0.6f, 1.0f};
+
     return DUAL_OK;
 }
 
@@ -151,12 +160,12 @@ void DUAL_BeginFrame(DUAL_App* app) {
 
     // ─── RENDU ÉCRAN DU HAUT (VERT) ───
     DUAL_SetActiveScreen(app, DUAL_SCREEN_TOP);
-    glClearColor(0.1f, 0.6f, 0.2f, 1.0f); // Vert sapin
+    glClearColor(app->screenTopClearColor.x, app->screenTopClearColor.y, app->screenTopClearColor.z, app->screenTopClearColor.w); // Vert sapin
     glClear(GL_COLOR_BUFFER_BIT);
 
     // ─── RENDU ÉCRAN DU BAS (BLEU) ───
     DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);
-    glClearColor(0.1f, 0.3f, 0.6f, 1.0f); // Bleu océan
+    glClearColor(app->screenBottomClearColor.x,app->screenBottomClearColor.y,app->screenBottomClearColor.z,app->screenBottomClearColor.w); // Bleu océan
     glClear(GL_COLOR_BUFFER_BIT);
 
     //DUAL_Log(DUAL_LOG_DEBUG, "FPS: %d", app->fps_current);
@@ -186,6 +195,13 @@ void DUAL_EndFrame(DUAL_App* app) {
 
     /* Affichage de la frame sur le moniteur */
     glfwSwapBuffers(app->window);
+}
+
+void DUAL_SetScreenTopClearColor(DUAL_App* app, DUAL_Vec4 clearColor) {
+    app->screenTopClearColor = clearColor;
+}
+void DUAL_SetScreenBottomClearColor(DUAL_App* app, DUAL_Vec4 clearColor) {
+    app->screenBottomClearColor = clearColor;
 }
 
 /* ============================================================================

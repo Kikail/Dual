@@ -530,7 +530,51 @@ void DUAL_MeasureText(const DUAL_Font* font, const char* texte, float* out_large
  * ========================================================================== */
 
 void DUAL_DrawRect(DUAL_Renderer2D* renderer, DUAL_Rect rect, DUAL_Color couleur) {
-    (void)renderer; (void)rect; (void)couleur;
+    if (!renderer) return;
+
+    // Un rectangle plein de couleur unie n'utilise pas de texture.
+    // Si une texture était active dans le batch, on force un Flush pour dessiner les éléments précédents.
+    if (renderer->texture_courante != NULL) {
+        FlushBatch(renderer);
+        renderer->texture_courante = NULL;
+    }
+
+    // Sécurité débordement : un rectangle plein nécessite 2 triangles (6 sommets)
+    if (renderer->vertex_count + 6 >= renderer->max_vertices) {
+        FlushBatch(renderer);
+    }
+
+    // Configuration du mode de mélange pour gérer l'opacité/transparence du rectangle
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    float x = rect.x;
+    float y = rect.y;
+    float w = rect.largeur;
+    float h = rect.hauteur;
+
+    // Coordonnées géométriques des 4 coins du rectangle plein
+    DUAL_Vec2 p0 = { x,     y };     // Haut - Gauche
+    DUAL_Vec2 p1 = { x + w, y };     // Haut - Droite
+    DUAL_Vec2 p2 = { x + w, y + h }; // Bas - Droite
+    DUAL_Vec2 p3 = { x,     y + h }; // Bas - Gauche
+
+    // Coordonnées UV neutres pour ne pas perturber le Fragment Shader
+    DUAL_Vec2 uv_neutre = { 0.0f, 0.0f };
+    uint32_t idx = renderer->vertex_count;
+
+    // Triangle 1 : Top-Left -> Top-Right -> Bottom-Right
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p0, uv_neutre, couleur };
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p1, uv_neutre, couleur };
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p2, uv_neutre, couleur };
+
+    // Triangle 2 : Top-Left -> Bottom-Right -> Bottom-Left
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p0, uv_neutre, couleur };
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p2, uv_neutre, couleur };
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p3, uv_neutre, couleur };
+
+    // Mise à jour du compteur de sommets du lot
+    renderer->vertex_count = idx;
 }
 
 void DUAL_DrawCircleOutline(DUAL_Renderer2D* renderer, DUAL_Circle cercle, DUAL_Color couleur, int32_t segments) {
