@@ -1,7 +1,7 @@
 /**
  * @file dual_audio.h
  * @brief Module audio de libdual : effets sonores chargés intégralement en
- *        RAM et musiques diffusées en streaming depuis le système de fichiers.
+ * RAM et musiques diffusées en streaming depuis le système de fichiers.
  */
 
 #ifndef DUAL_AUDIO_H
@@ -17,7 +17,7 @@ extern "C" {
 #endif
 
 /* ============================================================================
- *  Types opaques
+ * Types opaques
  * ========================================================================== */
 
 typedef struct DUAL_AudioManager DUAL_AudioManager;
@@ -26,7 +26,7 @@ typedef struct DUAL_Music DUAL_Music;
 typedef struct DUAL_SoundInstance DUAL_SoundInstance;
 
 /* ============================================================================
- *  Enumérations
+ * Enumérations
  * ========================================================================== */
 
 typedef enum DUAL_AudioChannel {
@@ -37,21 +37,18 @@ typedef enum DUAL_AudioChannel {
 } DUAL_AudioChannel;
 
 /* ============================================================================
- *  Cycle de vie du gestionnaire audio
+ * Cycle de vie du gestionnaire audio
  * ========================================================================== */
 
 DUAL_Result DUAL_AudioManager_Create(DUAL_App* app, DUAL_AudioManager** out_audio);
 void DUAL_AudioManager_Destroy(DUAL_AudioManager* audio);
 void DUAL_AudioManager_Update(DUAL_AudioManager* audio);
-void DUAL_AudioManager_SetChannelVolume(DUAL_AudioManager* audio, DUAL_AudioChannel canal, float volume);
+void DUAL_AudioManager_SetChannelVolume(DUAL_AudioManager* audio, DUAL_AudioChannel channel, float volume);
 
 /* ============================================================================
- *  Sons (chargés en RAM)
+ * Effets sonores (SFX chargé en RAM)
  * ========================================================================== */
 
-/**
- * @note MODIFIÉ : Ajout du paramètre audio pour lier le son au moteur.
- */
 DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManager* resources,
                                      const char* chemin_fichier, DUAL_Sound** out_sound);
 
@@ -60,16 +57,14 @@ void DUAL_Sound_Destroy(DUAL_ResourceManager* resources, DUAL_Sound* sound);
 DUAL_SoundInstance* DUAL_Sound_Play(DUAL_AudioManager* audio, const DUAL_Sound* sound,
                                      float volume, float pitch);
 
+void DUAL_SoundInstance_Play(DUAL_AudioManager* audio, DUAL_SoundInstance* instance);
 void DUAL_SoundInstance_Stop(DUAL_AudioManager* audio, DUAL_SoundInstance* instance);
 bool DUAL_SoundInstance_IsPlaying(const DUAL_AudioManager* audio, const DUAL_SoundInstance* instance);
 
 /* ============================================================================
- *  Musique (streaming)
+ * Musique (streaming)
  * ========================================================================== */
 
-/**
- * @note MODIFIÉ : Ajout du paramètre audio pour configurer le streaming sur le moteur.
- */
 DUAL_Result DUAL_Music_OpenFromFile(DUAL_AudioManager* audio, DUAL_ResourceManager* resources,
                                      const char* chemin_fichier, DUAL_Music** out_music);
 
@@ -85,4 +80,4 @@ bool DUAL_Music_IsPlaying(const DUAL_AudioManager* audio, const DUAL_Music* musi
 }
 #endif
 
-#endif /* DUAL_AUDIO_H */
+#endif // DUAL_AUDIO_H

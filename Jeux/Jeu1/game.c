@@ -27,6 +27,11 @@ static DUAL_Texture* bottom = NULL;
 static DUAL_Texture* bottom_buttom = NULL;
 static DUAL_Texture* gameoverTexture = NULL;
 
+static DUAL_SoundInstance* wingInstance = NULL;
+static DUAL_SoundInstance* hitInstance = NULL;
+static DUAL_Sound* soundHit = NULL;
+static DUAL_Sound* soundWing = NULL;
+
 float rotation = 0.0f;
 float bird_y = 200.0f;
 float bird_velocity = 0.0f;
@@ -45,7 +50,7 @@ DUAL_Vec2 grounds[4];
 typedef struct Pipe {
     DUAL_Vec2 pos;
     int espacement;
-}Pipe;
+} Pipe;
 Pipe pipes[3];
 
 #define VITESSE_BACKGROUND 30.0
@@ -72,6 +77,17 @@ void my_init(INCLUDES_FONCTIONS) {
     bird_down = NULL;
     bird_up = NULL;
     font = NULL;
+    background_day = NULL;
+    ground = NULL;
+    pipe = NULL;
+    menu = NULL;
+    bottom = NULL;
+    bottom_buttom = NULL;
+    gameoverTexture = NULL;
+    soundHit = NULL;
+    soundWing = NULL;
+    wingInstance = NULL;
+    hitInstance = NULL;
 
     printf("Le jeu démarre !\n");
     const char* racine = DUAL_FS_GetCartridgeRoot();
@@ -104,30 +120,40 @@ void my_init(INCLUDES_FONCTIONS) {
     snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/gameover.png", racine);
     DUAL_Texture_LoadFromFile(resourceManager, chemin_absolu, DUAL_FILTER_LINEAR, &gameoverTexture);
 
-    // Vérifie bien que ce fichier existe sur ta carte SD à cet emplacement exact !
-    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/arial.ttf", racine);
+    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/audio/hit.wav", racine);
+    DUAL_Sound_LoadFromFile(audioManager, resourceManager, chemin_absolu, &soundHit);
 
+    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/audio/wing.wav", racine);
+    DUAL_Sound_LoadFromFile(audioManager, resourceManager, chemin_absolu, &soundWing);
+
+    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/arial.ttf", racine);
     if (DUAL_Font_LoadFromFile(resourceManager, chemin_absolu, 80, &font) != DUAL_OK){
         DUAL_Log(DUAL_LOG_ERROR, "Erreur de chargement du font");
-        font = NULL; // On force à NULL en cas d'échec
+        font = NULL;
     }
 
-    // On initialise les backgrounds
-    DUAL_Texture_GetSize(background_day, &tex_w, &tex_h);
-    for (int i = 0; i < 4; i++) {
-        backgrounds[i].x = i * tex_w;
+    int w = 0, h = 0;
+
+    // On initialise les backgrounds avec des variables locales pour éviter d'écraser tex_w/tex_h globaux
+    if (background_day) {
+        DUAL_Texture_GetSize(background_day, &w, &h);
+        for (int i = 0; i < 4; i++) {
+            backgrounds[i].x = i * w;
+            backgrounds[i].y = 0;
+        }
     }
 
-    // On initialise les backgrounds
-    DUAL_Texture_GetSize(ground, &tex_w, &tex_h);
-    for (int i = 0; i < 4; i++) {
-        grounds[i].x = i * tex_w;
-        grounds[i].y = 480 - tex_h;
+    // On initialise le sol
+    if (ground) {
+        DUAL_Texture_GetSize(ground, &w, &h);
+        for (int i = 0; i < 4; i++) {
+            grounds[i].x = i * w;
+            grounds[i].y = 480 - h;
+        }
+        groundH = h - 10.0;
     }
-    groundH = tex_h - 10.0;
 
     init_world(PARAMS_FONCTIONS);
-
     srand(time(NULL));
 
     DUAL_SetScreenBottomClearColor(app, (DUAL_Vec4){0.874, 0.85, 0.588, 1.0});
@@ -143,24 +169,42 @@ void my_init(INCLUDES_FONCTIONS) {
 void deplacements_oiseau(float dt, INCLUDES_FONCTIONS) {
     bird_velocity += gravity * dt;
     DUAL_TouchState touch = DUAL_GetTouchState(inputManager);
+
     if (touch.phase == DUAL_TOUCH_STARTED) {
         bird_velocity = jump_strength;
+        if (wingInstance) {
+            DUAL_SoundInstance_Play(audioManager, wingInstance);
+        } else if (soundWing) {
+            wingInstance = DUAL_Sound_Play(audioManager, soundWing, 1.0, 1.0);
+        }
     }
+
     bird_y += bird_velocity * dt;
+
     if (bird_velocity < 0) {
-        // En phase de montée : on force l'angle vers le haut (-30 degrés environ)
         rotation = -30.0f * (M_PI / 180.0f);
-    }
-    else {
+    } else {
         float facteur_chute = bird_velocity / 400.0f;
         if (facteur_chute > 1.0f) facteur_chute = 1.0f;
         rotation = facteur_chute * (90.0f * (M_PI / 180.0f));
     }
+
+    // Collision avec le sol
     if (bird_y > 480.0f - groundH - 10.0) {
         bird_y = 480.0f - groundH - 10.0;
         bird_velocity = 0;
-        gameOver = true;
+
+        // CORRECTION : On ne joue le son QUE au moment du passage à gameOver
+        if (!gameOver) {
+            gameOver = true;
+            if (hitInstance) {
+                DUAL_SoundInstance_Play(audioManager, hitInstance);
+            } else if (soundHit) {
+                hitInstance = DUAL_Sound_Play(audioManager, soundHit, 1.0, 1.0);
+            }
+        }
     }
+
     if (bird_y < 10.0) {
         bird_y = 10.0;
         bird_velocity = 100;
@@ -168,10 +212,10 @@ void deplacements_oiseau(float dt, INCLUDES_FONCTIONS) {
 }
 
 void deplacement_backgrounds(float dt, INCLUDES_FONCTIONS) {
+    if (!background_day) return;
     DUAL_Texture_GetSize(background_day, &tex_w, &tex_h);
     for (int i = 0; i < 4; i++) {
         backgrounds[i].x -= VITESSE_BACKGROUND * dt;
-        // Si la texture n est plus visible on la remet tout a droite
         if (backgrounds[i].x < -tex_w) {
             backgrounds[i].x += 4 * tex_w;
         }
@@ -179,10 +223,10 @@ void deplacement_backgrounds(float dt, INCLUDES_FONCTIONS) {
 }
 
 void deplacement_grounds(float dt, INCLUDES_FONCTIONS) {
+    if (!ground) return;
     DUAL_Texture_GetSize(ground, &tex_w, &tex_h);
     for (int i = 0; i < 4; i++) {
         grounds[i].x -= VITESSE_GROUD * dt;
-        // Si la texture n est plus visible on la remet tout a droite
         if (grounds[i].x < -tex_w) {
             grounds[i].x += 4 * tex_w;
         }
@@ -190,10 +234,10 @@ void deplacement_grounds(float dt, INCLUDES_FONCTIONS) {
 }
 
 void deplacement_pipes(float dt, INCLUDES_FONCTIONS) {
+    if (!pipe) return;
     DUAL_Texture_GetSize(pipe, &tex_w, &tex_h);
     for (int i = 0; i < 3; i++) {
         pipes[i].pos.x -= VITESSE_GROUD * dt;
-        // Si la texture n est plus visible on la remet tout a droite
         if (pipes[i].pos.x < -tex_w) {
             pipes[i].pos.x += 3 * 300;
             pipes[i].pos.y = RandomPipeHeight();
@@ -202,19 +246,26 @@ void deplacement_pipes(float dt, INCLUDES_FONCTIONS) {
 }
 
 void handleCollisions(float dt, INCLUDES_FONCTIONS) {
-    DUAL_Texture_GetSize(bird_down, &tex_w, &tex_h);
-    int w_ois = tex_w; int h_ois = tex_h;
-    DUAL_Texture_GetSize(pipe, &tex_w, &tex_h);
-    int w_pipe = tex_w; int h_pipe = tex_h;
+    if (!bird_down || !pipe) return;
 
-    DUAL_Rect collider_oiseau = {200.0-(w_ois/2),bird_y-(h_ois/2), w_ois, h_ois};
+    int w_ois, h_ois, w_pipe, h_pipe;
+    DUAL_Texture_GetSize(bird_down, &w_ois, &h_ois);
+    DUAL_Texture_GetSize(pipe, &w_pipe, &h_pipe);
+
+    DUAL_Rect collider_oiseau = {200.0f - (w_ois / 2.0f), bird_y - (h_ois / 2.0f), w_ois, h_ois};
+
     for (int i = 0; i < 3; i++) {
-        tuyau_bas = (DUAL_Rect){pipes[i].pos.x - (w_pipe / 2), pipes[i].pos.y + ESPACEMENT_TUYAU, w_pipe, h_pipe};
+        tuyau_bas = (DUAL_Rect){pipes[i].pos.x - (w_pipe / 2.0f), pipes[i].pos.y + ESPACEMENT_TUYAU, w_pipe, h_pipe};
         tuyau_haut = tuyau_bas;
         tuyau_haut.y = pipes[i].pos.y - ESPACEMENT_TUYAU - h_pipe;
 
         if (DUAL_CollideRectRect(collider_oiseau, tuyau_haut) || DUAL_CollideRectRect(collider_oiseau, tuyau_bas)) {
             gameOver = true;
+            if (hitInstance) {
+                DUAL_SoundInstance_Play(audioManager, hitInstance);
+            } else if (soundHit) {
+                hitInstance = DUAL_Sound_Play(audioManager, soundHit, 1.0, 1.0);
+            }
             break;
         }
     }
@@ -222,7 +273,9 @@ void handleCollisions(float dt, INCLUDES_FONCTIONS) {
 
 void my_update(float dt, INCLUDES_FONCTIONS) {
     pressed = DUAL_IsTouching(inputManager);
+    DUAL_TouchState touch = DUAL_GetTouchState(inputManager);
 
+    // ÉTAT 1 : Le jeu est en cours (Pas de Game Over et Jeu Démarré)
     if (gameStarted && !gameOver) {
         deplacements_oiseau(dt, PARAMS_FONCTIONS);
         deplacement_backgrounds(dt, PARAMS_FONCTIONS);
@@ -230,65 +283,63 @@ void my_update(float dt, INCLUDES_FONCTIONS) {
         deplacement_pipes(dt, PARAMS_FONCTIONS);
         handleCollisions(dt, PARAMS_FONCTIONS);
     }
-    else {
-        DUAL_TouchState touch = DUAL_GetTouchState(inputManager);
+    // ÉTAT 2 : Écran de Game Over (Le joueur a perdu)
+    else if (gameOver) {
+        // Si on clique sur l'écran de game over, on RESET TOUT pour revenir au Menu
         if (touch.phase == DUAL_TOUCH_STARTED) {
-            gameStarted = true;
-            deplacements_oiseau(dt, PARAMS_FONCTIONS);
-        }
-    }
-
-    if (gameOver) {
-        DUAL_TouchState touch = DUAL_GetTouchState(inputManager);
-        if (touch.phase == DUAL_TOUCH_STARTED) {
-            gameStarted = false;
             gameOver = false;
-            rotation = 0.0;
-            bird_y = 200.0;
+            gameStarted = false; // On retourne à l'état Menu d'abord
+            rotation = 0.0f;
+            bird_y = 200.0f;
             bird_velocity = 0.0f;
             pressed = false;
             init_world(PARAMS_FONCTIONS);
         }
     }
+    // ÉTAT 3 : Écran de Menu de départ (!gameStarted && !gameOver)
+    else {
+        if (touch.phase == DUAL_TOUCH_STARTED) {
+            gameStarted = true;
+            // On applique le premier saut directement pour lancer l'oiseau
+            bird_velocity = jump_strength;
+            if (wingInstance) {
+                DUAL_SoundInstance_Play(audioManager, wingInstance);
+            } else if (soundWing) {
+                wingInstance = DUAL_Sound_Play(audioManager, soundWing, 1.0, 1.0);
+            }
+        }
+    }
 }
 
 void affichage_oiseau(INCLUDES_FONCTIONS) {
-    DUAL_Texture* bird = NULL;
-    if (bird_velocity < 150) {
-        bird = bird_down;
-    }
-    else {
-        bird = bird_up;
-    }
-    DUAL_Texture_GetSize(bird_down, &tex_w, &tex_h);
+    DUAL_Texture* bird = (bird_velocity < 150) ? bird_down : bird_up;
+    if (!bird) return;
 
-    // Sécurité au cas où une texture a raté son chargement
-    if (bird) {
-        DUAL_SpriteParams params = {
-            .texture = bird,
-            .position = {200.0f, bird_y}, // 200 sur l'axe X pour le décentrer un peu vers la gauche
-            .origine = { tex_w / 2.0f, tex_h / 2.0f },
-            .echelle = { 1.0f, 1.0f },
-            .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
-            .rotation_radians = rotation,
-            .teinte = { 1.0f, 1.0f, 1.0f, 1.0f },
-            .mode_melange = DUAL_BLEND_ALPHA
-        };
-        DUAL_DrawSprite(renderer2D, &params);
-    }
+    DUAL_Texture_GetSize(bird, &tex_w, &tex_h);
+    DUAL_SpriteParams params = {
+        .texture = bird,
+        .position = {200.0f, bird_y},
+        .origine = { tex_w / 2.0f, tex_h / 2.0f },
+        .echelle = { 1.0f, 1.0f },
+        .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
+        .rotation_radians = rotation,
+        .teinte = { 1.0f, 1.0f, 1.0f, 1.0f },
+        .mode_melange = DUAL_BLEND_ALPHA
+    };
+    DUAL_DrawSprite(renderer2D, &params);
 }
 
 void affichage_background(INCLUDES_FONCTIONS) {
+    if (!background_day) return;
     DUAL_Texture_GetSize(background_day, &tex_w, &tex_h);
     for (int i = 0; i < 4; i++) {
-        DUAL_Vec2 pos = backgrounds[i];
         DUAL_SpriteParams params = {
             .texture = background_day,
-            .position = pos,
-            .origine = { 0.0, 0.0 },
+            .position = backgrounds[i],
+            .origine = { 0.0f, 0.0f },
             .echelle = { 1.0f, 1.0f },
             .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
-            .rotation_radians = 0.0,
+            .rotation_radians = 0.0f,
             .teinte = { 1.0f, 1.0f, 1.0f, 1.0f },
             .mode_melange = DUAL_BLEND_ALPHA
         };
@@ -297,16 +348,16 @@ void affichage_background(INCLUDES_FONCTIONS) {
 }
 
 void affichage_ground(INCLUDES_FONCTIONS) {
+    if (!ground) return;
     DUAL_Texture_GetSize(ground, &tex_w, &tex_h);
     for (int i = 0; i < 4; i++) {
-        DUAL_Vec2 pos = grounds[i];
         DUAL_SpriteParams params = {
             .texture = ground,
-            .position = pos,
-            .origine = { 0.0, 0.0 },
+            .position = grounds[i],
+            .origine = { 0.0f, 0.0f },
             .echelle = { 1.0f, 1.0f },
             .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
-            .rotation_radians = 0.0,
+            .rotation_radians = 0.0f,
             .teinte = { 1.0f, 1.0f, 1.0f, 1.0f },
             .mode_melange = DUAL_BLEND_ALPHA
         };
@@ -315,14 +366,15 @@ void affichage_ground(INCLUDES_FONCTIONS) {
 }
 
 void affichage_menu(INCLUDES_FONCTIONS) {
+    if (!menu) return;
     DUAL_Texture_GetSize(menu, &tex_w, &tex_h);
     DUAL_SpriteParams paramsHaut = {
         .texture = menu,
-        .position = {400,240.0},
-        .origine = { tex_w/2, tex_h/2.0f },
+        .position = {400.0f, 240.0f},
+        .origine = { tex_w / 2.0f, tex_h / 2.0f },
         .echelle = { 1.0f, 1.0f },
         .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
-        .rotation_radians = 0.0,
+        .rotation_radians = 0.0f,
         .teinte = { 1.0f, 1.0f, 1.0f, 1.0f },
         .mode_melange = DUAL_BLEND_ALPHA
     };
@@ -330,6 +382,7 @@ void affichage_menu(INCLUDES_FONCTIONS) {
 }
 
 void affichage_tuyaux(INCLUDES_FONCTIONS) {
+    if (!pipe) return;
     DUAL_Texture_GetSize(pipe, &tex_w, &tex_h);
 
     for (int i = 0; i < 3; i++) {
@@ -337,10 +390,10 @@ void affichage_tuyaux(INCLUDES_FONCTIONS) {
         DUAL_SpriteParams params = {
             .texture = pipe,
             .position = {pipes[i].pos.x, pipes[i].pos.y + pipes[i].espacement},
-            .origine = { tex_w/2, 0.0 },
+            .origine = { tex_w / 2.0f, 0.0f },
             .echelle = { 1.0f, 1.0f },
             .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
-            .rotation_radians = 0.0,
+            .rotation_radians = 0.0f,
             .teinte = { 1.0f, 1.0f, 1.0f, 1.0f },
             .mode_melange = DUAL_BLEND_ALPHA
         };
@@ -350,7 +403,7 @@ void affichage_tuyaux(INCLUDES_FONCTIONS) {
         DUAL_SpriteParams paramsHaut = {
             .texture = pipe,
             .position = {pipes[i].pos.x, pipes[i].pos.y - pipes[i].espacement},
-            .origine = { tex_w/2, 0.0 },
+            .origine = { tex_w / 2.0f, 0.0f },
             .echelle = { 1.0f, 1.0f },
             .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
             .rotation_radians = M_PI,
@@ -362,57 +415,41 @@ void affichage_tuyaux(INCLUDES_FONCTIONS) {
 }
 
 void affichage_bas(INCLUDES_FONCTIONS) {
-    if (pressed) {
-        DUAL_Texture_GetSize(bottom, &tex_w, &tex_h);
-        DUAL_SpriteParams params = {
-            .texture = bottom,
-            .position = {400,240.0},
-            .origine = { tex_w/2, tex_h/2.0f },
-            .echelle = { 1.0f, 1.0f },
-            .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
-            .rotation_radians = 0.0,
-            .teinte = { 1.0f, 1.0f, 1.0f, 1.0f },
-            .mode_melange = DUAL_BLEND_ALPHA
-        };
-        DUAL_DrawSprite(renderer2D, &params);
-    }
-    else {
-        DUAL_Texture_GetSize(bottom, &tex_w, &tex_h);
-        DUAL_SpriteParams params = {
-            .texture = bottom_buttom,
-            .position = {400,240.0},
-            .origine = { tex_w/2, tex_h/2.0f },
-            .echelle = { 1.0f, 1.0f },
-            .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
-            .rotation_radians = 0.0,
-            .teinte = { 1.0f, 1.0f, 1.0f, 1.0f },
-            .mode_melange = DUAL_BLEND_ALPHA
-        };
-        DUAL_DrawSprite(renderer2D, &params);
-    }
-}
+    DUAL_Texture* tex_render = pressed ? bottom : bottom_buttom;
+    if (!tex_render) return;
 
-void affichage_gameover(INCLUDES_FONCTIONS) {
-    DUAL_Texture_GetSize(gameoverTexture, &tex_w, &tex_h);
+    DUAL_Texture_GetSize(tex_render, &tex_w, &tex_h);
     DUAL_SpriteParams params = {
-        .texture = gameoverTexture,
-        .position = {400, 240},
-        .origine = { tex_w/2.0, tex_h/2.0 },
+        .texture = tex_render,
+        .position = {400.0f, 240.0f},
+        .origine = { tex_w / 2.0f, tex_h / 2.0f },
         .echelle = { 1.0f, 1.0f },
         .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
-        .rotation_radians = 0.0,
+        .rotation_radians = 0.0f,
         .teinte = { 1.0f, 1.0f, 1.0f, 1.0f },
         .mode_melange = DUAL_BLEND_ALPHA
     };
     DUAL_DrawSprite(renderer2D, &params);
 }
 
-// 3. Affichage du jeu (Dessin)
-void my_draw(INCLUDES_FONCTIONS) {
-    // Sélection de l'écran virtuel ciblé (Top Screen)
-    DUAL_SetActiveScreen(app, DUAL_SCREEN_TOP);
+void affichage_gameover(INCLUDES_FONCTIONS) {
+    if (!gameoverTexture) return;
+    DUAL_Texture_GetSize(gameoverTexture, &tex_w, &tex_h);
+    DUAL_SpriteParams params = {
+        .texture = gameoverTexture,
+        .position = {400.0f, 240.0f},
+        .origine = { tex_w / 2.0f, tex_h / 2.0f },
+        .echelle = { 1.0f, 1.0f },
+        .rect_source = { 0.0f, 0.0f, (float)tex_w, (float)tex_h },
+        .rotation_radians = 0.0f,
+        .teinte = { 1.0f, 1.0f, 1.0f, 1.0f },
+        .mode_melange = DUAL_BLEND_ALPHA
+    };
+    DUAL_DrawSprite(renderer2D, &params);
+}
 
-    // Un seul Begin suffit pour tout le rendu de cet écran
+void my_draw(INCLUDES_FONCTIONS) {
+    DUAL_SetActiveScreen(app, DUAL_SCREEN_TOP);
     DUAL_Renderer2D_Begin(renderer2D);
 
     affichage_background(PARAMS_FONCTIONS);
@@ -423,7 +460,6 @@ void my_draw(INCLUDES_FONCTIONS) {
     DUAL_Renderer2D_End(renderer2D);
 
     DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);
-
     DUAL_Renderer2D_Begin(renderer2D);
 
     affichage_bas(PARAMS_FONCTIONS);
@@ -438,22 +474,44 @@ void my_draw(INCLUDES_FONCTIONS) {
     DUAL_Renderer2D_End(renderer2D);
 }
 
-
 void my_shutdown(INCLUDES_FONCTIONS) {
-    printf("Fermeture du jeu, nettoyage des textures...\n");
+    printf("Fermeture du jeu, nettoyage des ressources...\n");
 
-    if (bird_down) DUAL_Texture_Destroy(resourceManager, bird_down);
-    if (bird_up)   DUAL_Texture_Destroy(resourceManager, bird_up);
-    if (font)      DUAL_Font_Destroy(resourceManager, font);
+    // Libération de TOUTES les textures
+    if (bird_down)       DUAL_Texture_Destroy(resourceManager, bird_down);
+    if (bird_up)         DUAL_Texture_Destroy(resourceManager, bird_up);
+    if (background_day)  DUAL_Texture_Destroy(resourceManager, background_day);
+    if (ground)          DUAL_Texture_Destroy(resourceManager, ground);
+    if (pipe)            DUAL_Texture_Destroy(resourceManager, pipe);
+    if (menu)            DUAL_Texture_Destroy(resourceManager, menu);
+    if (bottom)          DUAL_Texture_Destroy(resourceManager, bottom);
+    if (bottom_buttom)   DUAL_Texture_Destroy(resourceManager, bottom_buttom);
+    if (gameoverTexture) DUAL_Texture_Destroy(resourceManager, gameoverTexture);
 
+    // Libération de la police
+    if (font)            DUAL_Font_Destroy(resourceManager, font);
+
+    // Libération des fichiers sons statiques
+    if (soundHit)        DUAL_Sound_Destroy(resourceManager, soundHit);
+    if (soundWing)       DUAL_Sound_Destroy(resourceManager, soundWing);
+
+    // Remise à zéro des pointeurs globaux pour des raisons de sécurité
     bird_down = NULL;
     bird_up = NULL;
+    background_day = NULL;
+    ground = NULL;
+    pipe = NULL;
+    menu = NULL;
+    bottom = NULL;
+    bottom_buttom = NULL;
+    gameoverTexture = NULL;
     font = NULL;
+    soundHit = NULL;
+    soundWing = NULL;
+    wingInstance = NULL;
+    hitInstance = NULL;
 }
 
-// ========================================================================
-// LE POINT D'ENTRÉE REQUIS PAR LE MOTEUR
-// ========================================================================
 void get_game_api(GameAPI* api) {
     api->initialized = true;
     api->init = my_init;

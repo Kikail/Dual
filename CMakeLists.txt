@@ -22,6 +22,23 @@ set(MOTEUR_SOURCES
         SDK/src/dual_audio.c
         SDK/src/dual_fs.c
         SDK/include/game_api.h
+        SDK/include/dual_utils.h
+)
+
+# Sources du SDK partagées entre le moteur et les tests (sans aucun main.c)
+set(SDK_SOURCES
+        SDK/src/dual_core.c
+        SDK/thirdparty/glad/glad.c
+        SDK/include/dual_internal.h
+        SDK/src/dual_input.c
+        SDK/src/dual_math.c
+        SDK/src/dual_graphics_2d.c
+        SDK/src/dual_graphics_3d.c
+        SDK/src/dual_resources.c
+        SDK/src/dual_audio.c
+        SDK/src/dual_fs.c
+        SDK/include/game_api.h
+        SDK/include/dual_utils.h
 )
 
 add_executable(Dual ${MOTEUR_SOURCES})
@@ -73,3 +90,19 @@ add_custom_command(TARGET game POST_BUILD
         ${CLE_USB}/game.so
         COMMENT "Copie de game.so vers la racine de la cle USB..."
 )
+
+# ========================================================================
+# TESTS
+# ========================================================================
+
+# 1. On déclare le nouvel exécutable avec son main spécifique et le SDK
+add_executable(test_core Jeux/Testing/test_core.c ${SDK_SOURCES})
+
+# 2. On lui donne accès aux headers
+target_include_directories(test_core PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
+)
+
+# 3. On lui lie les mêmes bibliothvèques si nécessaire
+target_link_libraries(test_core PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
