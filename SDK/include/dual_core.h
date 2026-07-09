@@ -38,6 +38,25 @@ extern "C" {
  */
 typedef struct DUAL_App DUAL_App;
 
+/**
+ * @brief Couleur RGBA avec composantes flottantes normalisées entre 0.0 et 1.0.
+ */
+typedef struct DUAL_Color {
+    float r; /**< Composante rouge, entre 0.0 et 1.0. */
+    float g; /**< Composante verte, entre 0.0 et 1.0. */
+    float b; /**< Composante bleue, entre 0.0 et 1.0. */
+    float a; /**< Composante alpha (opacité), entre 0.0 et 1.0. */
+} DUAL_Color;
+
+#define DUAL_COLOR_RED (DUAL_Color){1.0, 0.0, 0.0, 1.0}
+#define DUAL_COLOR_GREEN (DUAL_Color){0.0, 1.0, 0.0, 1.0}
+#define DUAL_COLOR_BLUE (DUAL_Color){0.0, 0.0, 1.0, 1.0}
+#define DUAL_COLOR_YELLOW (DUAL_Color){1.0, 1.0, 0.0, 1.0}
+#define DUAL_COLOR_MAGENTA (DUAL_Color){1.0, 0.0, 1.0, 1.0}
+#define DUAL_COLOR_CYAN (DUAL_Color){0.0, 1.0, 1.0, 1.0}
+#define DUAL_COLOR_WHITE (DUAL_Color){1.0, 1.0, 1.0, 1.0}
+#define DUAL_COLOR_BLACK (DUAL_Color){0.0, 0.0, 0.0, 1.0}
+
 /* ============================================================================
  *  Enumérations
  * ========================================================================== */
@@ -175,8 +194,19 @@ void DUAL_SetActiveScreen(DUAL_App* app, DUAL_ScreenID screen);
  */
 void DUAL_EndFrame(DUAL_App* app);
 
-void DUAL_SetScreenTopClearColor(DUAL_App* app, DUAL_Vec4 clearColor);
-void DUAL_SetScreenBottomClearColor(DUAL_App* app, DUAL_Vec4 clearColor);
+/**
+ * @brief Permet de changer la couleur de fond d'un ecran
+ *
+ * Certaines couleurs predefinies sont disponibles comme :
+ *      DUAL_COLOR_RED
+ *      DUAL_COLOR_GREEN
+ *      DUAL_COLOR_BLUE
+ *
+ * @param app Instance de l'application.
+ * @param screenId Id correspondant a l'ecran cible [DUAL_SCREEN_TOP, DUAL_SCREEN_BOTTOM]
+ * @param clearColor Couleur que nous voulons appliquer pour le fond
+ */
+void DUAL_SetScreenClearColor(DUAL_App* app,DUAL_ScreenID screenId, DUAL_Color clearColor);
 
 /* ============================================================================
  *  Timing
@@ -209,6 +239,12 @@ double DUAL_GetTime(const DUAL_App* app);
  */
 int32_t DUAL_GetFPS(const DUAL_App* app);
 
+/**
+ * @brief Retourne un pointeur visant la fenetre GLFW
+ *
+ * @param app Instance de l'application.
+ * @return Pointeur vers la fenetre GLFW.
+ */
 GLFWwindow* DUAL_GetWindow(const DUAL_App* app);
 
 /* ============================================================================

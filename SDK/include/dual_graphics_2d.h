@@ -72,24 +72,6 @@ typedef enum DUAL_BlendMode {
  *  Structures
  * ========================================================================== */
 
-/**
- * @brief Couleur RGBA avec composantes flottantes normalisées entre 0.0 et 1.0.
- */
-typedef struct DUAL_Color {
-    float r; /**< Composante rouge, entre 0.0 et 1.0. */
-    float g; /**< Composante verte, entre 0.0 et 1.0. */
-    float b; /**< Composante bleue, entre 0.0 et 1.0. */
-    float a; /**< Composante alpha (opacité), entre 0.0 et 1.0. */
-} DUAL_Color;
-
-#define DUAL_COLOR_RED (DUAL_Color){1.0, 0.0, 0.0, 1.0}
-#define DUAL_COLOR_GREEN (DUAL_Color){0.0, 1.0, 0.0, 1.0}
-#define DUAL_COLOR_BLUE (DUAL_Color){0.0, 0.0, 1.0, 1.0}
-#define DUAL_COLOR_YELLOW (DUAL_Color){1.0, 1.0, 0.0, 1.0}
-#define DUAL_COLOR_MAGENTA (DUAL_Color){1.0, 0.0, 1.0, 1.0}
-#define DUAL_COLOR_CYAN (DUAL_Color){0.0, 1.0, 1.0, 1.0}
-#define DUAL_COLOR_WHITE (DUAL_Color){1.0, 1.0, 1.0, 1.0}
-#define DUAL_COLOR_BLACK (DUAL_Color){0.0, 0.0, 1.0, 1.0}
 
 /**
  * @brief Paramètres complets de dessin d'un sprite, transmis à DUAL_DrawSprite().

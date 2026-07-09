@@ -156,7 +156,7 @@ void my_init(INCLUDES_FONCTIONS) {
     init_world(PARAMS_FONCTIONS);
     srand(time(NULL));
 
-    DUAL_SetScreenBottomClearColor(app, (DUAL_Vec4){0.874, 0.85, 0.588, 1.0});
+    DUAL_SetScreenClearColor(app, DUAL_SCREEN_BOTTOM,(DUAL_Color){0.874, 0.85, 0.588, 1.0});
 
     gameStarted = false;
     gameOver = false;

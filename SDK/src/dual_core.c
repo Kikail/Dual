@@ -24,8 +24,8 @@ typedef struct DUAL_App {
     int32_t     fps_counter;
     int32_t     fps_current;
 
-    DUAL_Vec4 screenTopClearColor;
-    DUAL_Vec4 screenBottomClearColor;
+    DUAL_Color screenTopClearColor;
+    DUAL_Color screenBottomClearColor;
 }DUAL_App;
 
 /* ============================================================================
@@ -106,8 +106,8 @@ DUAL_Result DUAL_Init(const DUAL_AppConfig* config, DUAL_App** out_app) {
 
     DUAL_Log(DUAL_LOG_INFO, "Système Dual initialisé avec succès (%dx%d par écran).", app->largeur_ecran, app->hauteur_ecran);
 
-    app->screenTopClearColor = (DUAL_Vec4){0.1f, 0.6f, 0.2f, 1.0f};
-    app->screenBottomClearColor = (DUAL_Vec4){0.1f, 0.3f, 0.6f, 1.0f};
+    app->screenTopClearColor = (DUAL_Color){0.1f, 0.6f, 0.2f, 1.0f};
+    app->screenBottomClearColor = (DUAL_Color){0.1f, 0.3f, 0.6f, 1.0f};
 
     return DUAL_OK;
 }
@@ -160,12 +160,12 @@ void DUAL_BeginFrame(DUAL_App* app) {
 
     // ─── RENDU ÉCRAN DU HAUT (VERT) ───
     DUAL_SetActiveScreen(app, DUAL_SCREEN_TOP);
-    glClearColor(app->screenTopClearColor.x, app->screenTopClearColor.y, app->screenTopClearColor.z, app->screenTopClearColor.w); // Vert sapin
+    glClearColor(app->screenTopClearColor.r, app->screenTopClearColor.g, app->screenTopClearColor.b, app->screenTopClearColor.a); // Vert sapin
     glClear(GL_COLOR_BUFFER_BIT);
 
     // ─── RENDU ÉCRAN DU BAS (BLEU) ───
     DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);
-    glClearColor(app->screenBottomClearColor.x,app->screenBottomClearColor.y,app->screenBottomClearColor.z,app->screenBottomClearColor.w); // Bleu océan
+    glClearColor(app->screenBottomClearColor.r,app->screenBottomClearColor.g,app->screenBottomClearColor.b,app->screenBottomClearColor.a); // Bleu océan
     glClear(GL_COLOR_BUFFER_BIT);
 
     //DUAL_Log(DUAL_LOG_DEBUG, "FPS: %d", app->fps_current);
@@ -197,11 +197,19 @@ void DUAL_EndFrame(DUAL_App* app) {
     glfwSwapBuffers(app->window);
 }
 
-void DUAL_SetScreenTopClearColor(DUAL_App* app, DUAL_Vec4 clearColor) {
-    app->screenTopClearColor = clearColor;
-}
-void DUAL_SetScreenBottomClearColor(DUAL_App* app, DUAL_Vec4 clearColor) {
-    app->screenBottomClearColor = clearColor;
+void DUAL_SetScreenClearColor(DUAL_App* app,DUAL_ScreenID screenId, DUAL_Color clearColor) {
+    if (!app) return;
+
+    switch (screenId) {
+        case DUAL_SCREEN_TOP:
+            app->screenTopClearColor = clearColor;
+            break;
+        case DUAL_SCREEN_BOTTOM:
+            app->screenBottomClearColor = clearColor;
+            break;
+        default:
+            break;
+    }
 }
 
 /* ============================================================================

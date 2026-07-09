@@ -8,7 +8,7 @@
 #include "dual_utils.h"
 
 int main() {
-    DUAL_Log(DUAL_LOG_INFO, "Dual App started");
+    DUAL_Log(DUAL_LOG_INFO, "Dual App started !");
 
     // On initialise l'application
     DUAL_App* app = NULL;
@@ -24,8 +24,8 @@ int main() {
     DEBUG_DUAL_RESULT(result);
 
     // On peut changer la couleur de fond
-    DUAL_SetScreenBottomClearColor(app, (DUAL_Vec4){1.0,0.0,0.0,1.0});
-    DUAL_SetScreenTopClearColor(app, (DUAL_Vec4){0.0,0.0,1.0,1.0});
+    DUAL_SetScreenClearColor(app, DUAL_SCREEN_BOTTOM, DUAL_COLOR_WHITE);
+    DUAL_SetScreenClearColor(app, DUAL_SCREEN_TOP, DUAL_COLOR_BLACK);
 
     // On creer un compteur pour afficher les stats toutes les 10 secondes
     float compteur = 0.0;
