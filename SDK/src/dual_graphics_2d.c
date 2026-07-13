@@ -61,7 +61,10 @@ struct DUAL_Renderer2D {
     DUAL_Texture* texture_courante; // Texture active pour le batch actuel
 };
 
-/* Shaders 2D intégrés */
+/* ============================================================================
+ * Shaders 2D intégrés
+ * ========================================================================== */
+
 const char* vertex_shader_src =
     "#version 330 core\n"
     "layout (location = 0) in vec2 aPos;\n"
@@ -83,8 +86,31 @@ const char* fragment_shader_src =
     "in vec4 VertexColor;\n"
     "out vec4 FragColor;\n"
     "uniform sampler2D uTexture;\n"
+    "uniform bool uUseTexture;\n"
     "void main() {\n"
-    "   FragColor = texture(uTexture, TexCoord) * VertexColor;\n"
+    "   if (uUseTexture) {\n"
+    "       FragColor = texture(uTexture, TexCoord) * VertexColor;\n"
+    "   } else {\n"
+    "       // Mode sans texture. Un UV avec x < -1.5 est le code pour DUAL_DrawRect\n"
+    "       if (TexCoord.x < -1.5) {\n"
+    "           FragColor = VertexColor;\n"
+    "           return;\n"
+    "       }\n"
+    "       // Mode procédural : DUAL_DrawCircleOutline (TexCoord de -1.0 à 1.0)\n"
+    "       float distance = length(TexCoord);\n"
+    "       \n"
+    "       float epaisseur = 0.05; // Ajuste ici l'épaisseur du trait (en % du rayon)\n"
+    "       float lissage = 0.01;   // Force de l'anti-aliasing\n"
+    "       \n"
+    "       // Anti-aliasing du bord extérieur et intérieur\n"
+    "       float alpha_ext = 1.0 - smoothstep(1.0 - lissage, 1.0, distance);\n"
+    "       float alpha_int = smoothstep(1.0 - epaisseur - lissage, 1.0 - epaisseur, distance);\n"
+    "       \n"
+    "       float final_alpha = alpha_ext * alpha_int;\n"
+    "       \n"
+    "       if (final_alpha <= 0.0) discard;\n"
+    "       FragColor = vec4(VertexColor.rgb, VertexColor.a * final_alpha);\n"
+    "   }\n"
     "}\n";
 
 static GLuint CompileShader(GLenum type, const char* source) {
@@ -108,7 +134,6 @@ static GLuint CompileShader(GLenum type, const char* source) {
 DUAL_Result DUAL_Texture_LoadFromFile(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_TextureFilter filtre, DUAL_Texture** out_texture) {
     int largeur, hauteur, canaux;
 
-    // CORRECTION : Pas de retournement vertical pour harmoniser avec le texte
     stbi_set_flip_vertically_on_load(false);
     uint8_t* pixels = stbi_load(chemin_fichier, &largeur, &hauteur, &canaux, STBI_rgb_alpha);
 
@@ -125,7 +150,6 @@ DUAL_Result DUAL_Texture_LoadFromFile(DUAL_ResourceManager* resources, const cha
 DUAL_Result DUAL_Texture_LoadFromMemory(DUAL_ResourceManager* resources, const uint8_t* pixels, int32_t largeur, int32_t hauteur, DUAL_TextureFilter filtre, DUAL_Texture** out_texture) {
     if (!pixels || !out_texture) return DUAL_ERROR_INVALID_ARG;
 
-    // Calcul de l'empreinte VRAM brute
     uint64_t taille_vram = (uint64_t)largeur * hauteur * 4;
     DUAL_ResourceHandle* res_handle = NULL;
 
@@ -181,10 +205,6 @@ void DUAL_Texture_GetSize(const DUAL_Texture* texture, int32_t* out_largeur, int
     }
 }
 
-/* Accesseur interne : DUAL_Texture est opaque en dehors de ce fichier, mais
- * dual_graphics_3d.c a besoin de l'id OpenGL pour binder la texture diffuse
- * d'un DUAL_Material. Même pattern que DUAL_Internal_GetGLFWWindow entre
- * dual_core.c et dual_input.c. */
 GLuint DUAL_Internal_GetTextureID(const DUAL_Texture* texture) {
     return texture ? texture->id_opengl : 0;
 }
@@ -209,7 +229,7 @@ DUAL_Result DUAL_Renderer2D_Create(DUAL_App* app, DUAL_Renderer2D** out_renderer
     glDeleteShader(vs);
     glDeleteShader(fs);
 
-    renderer->max_vertices = 2000 * 4; // Allocation pour lots de sprites
+    renderer->max_vertices = 2000 * 4;
     renderer->vertex_count = 0;
     renderer->vertex_buffer = (Vertex2D*)malloc(sizeof(Vertex2D) * renderer->max_vertices);
     renderer->texture_courante = NULL;
@@ -246,26 +266,28 @@ void DUAL_Renderer2D_Destroy(DUAL_Renderer2D* renderer) {
     }
 }
 
-// Envoie les géométries accumulées au GPU dès que la texture change ou que le buffer est plein
 static void FlushBatch(DUAL_Renderer2D* renderer) {
     if (renderer->vertex_count == 0) return;
 
     glUseProgram(renderer->shader_program);
 
-    // Calcul automatique des matrices selon l'écran virtuel ciblé (ex: 400x240)
     int32_t w, h;
     DUAL_Internal_GetScreenDimensions(renderer->app, &w, &h);
     DUAL_Mat4 projection = DUAL_Mat4_Ortho(0.0f, (float)w, (float)h, 0.0f, -1.0f, 1.0f);
 
-    // Calcul de la matrice de vue caméra avec une origine standard (en haut à gauche)
     DUAL_Mat4 view = DUAL_Mat4_Identity();
     view = DUAL_Mat4_Multiply(view, DUAL_Mat4_Translate((DUAL_Vec3){-renderer->camera_pos.x, -renderer->camera_pos.y, 0.0f}));
 
     glUniformMatrix4fv(glGetUniformLocation(renderer->shader_program, "uProjection"), 1, GL_FALSE, projection.m);
     glUniformMatrix4fv(glGetUniformLocation(renderer->shader_program, "uView"), 1, GL_FALSE, view.m);
 
+    // Configuration de l'uniform booléen uUseTexture
+    GLint use_tex_loc = glGetUniformLocation(renderer->shader_program, "uUseTexture");
     if (renderer->texture_courante) {
+        glUniform1i(use_tex_loc, 1);
         glBindTexture(GL_TEXTURE_2D, renderer->texture_courante->id_opengl);
+    } else {
+        glUniform1i(use_tex_loc, 0);
     }
 
     glBindVertexArray(renderer->vao);
@@ -282,11 +304,6 @@ void DUAL_Renderer2D_Begin(DUAL_Renderer2D* renderer) {
     if (renderer) {
         renderer->vertex_count = 0;
         renderer->texture_courante = NULL;
-        /* Défensif : le module 2D ne doit jamais dépendre du fait qu'un autre
-         * module (dual_graphics_3d.c notamment) ait bien désactivé le culling
-         * en sortie. Les quads 2D sont enroulés dans le sens horaire en espace
-         * écran ; si GL_CULL_FACE restait actif ici, ils seraient tous éliminés
-         * silencieusement (aucun sprite/texte visible). */
         glDisable(GL_CULL_FACE);
     }
 }
@@ -300,13 +317,11 @@ void DUAL_Renderer2D_End(DUAL_Renderer2D* renderer) {
 void DUAL_DrawSprite(DUAL_Renderer2D* renderer, const DUAL_SpriteParams* params) {
     if (!renderer || !params || !params->texture) return;
 
-    // Si changement de texture, on vide le lot actuel
     if (renderer->texture_courante != params->texture) {
         FlushBatch(renderer);
         renderer->texture_courante = params->texture;
     }
 
-    // Gestion du mode de mélange (Blending)
     if (params->mode_melange == DUAL_BLEND_ALPHA) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -317,26 +332,21 @@ void DUAL_DrawSprite(DUAL_Renderer2D* renderer, const DUAL_SpriteParams* params)
         glDisable(GL_BLEND);
     }
 
-    // Sécurité débordement buffer
     if (renderer->vertex_count + 6 >= renderer->max_vertices) {
         FlushBatch(renderer);
     }
 
-    // Calcul des dimensions (Correction du bug de hauteur appliquée)
     float w = (params->rect_source.largeur > 0) ? params->rect_source.largeur : (float)params->texture->largeur;
     float h = (params->rect_source.hauteur > 0) ? params->rect_source.hauteur : (float)params->texture->hauteur;
 
     w *= params->echelle.x;
     h *= params->echelle.y;
 
-
-    // Positions des 4 coins locaux
     DUAL_Vec2 p0 = { -params->origine.x, -params->origine.y };
     DUAL_Vec2 p1 = { w - params->origine.x, -params->origine.y };
     DUAL_Vec2 p2 = { w - params->origine.x, h - params->origine.y };
     DUAL_Vec2 p3 = { -params->origine.x, h - params->origine.y };
 
-    // Application de la rotation si nécessaire
     if (params->rotation_radians != 0.0f) {
         float cos_r = cosf(params->rotation_radians);
         float sin_r = sinf(params->rotation_radians);
@@ -344,19 +354,16 @@ void DUAL_DrawSprite(DUAL_Renderer2D* renderer, const DUAL_SpriteParams* params)
         p0 = ROTATE(p0); p1 = ROTATE(p1); p2 = ROTATE(p2); p3 = ROTATE(p3);
     }
 
-    // Translation globale vers la position Monde
     p0.x += params->position.x; p0.y += params->position.y;
     p1.x += params->position.x; p1.y += params->position.y;
     p2.x += params->position.x; p2.y += params->position.y;
     p3.x += params->position.x; p3.y += params->position.y;
 
-    // Calcul des coordonnées UV
     float u0 = params->rect_source.x / params->texture->largeur;
     float v0 = params->rect_source.y / params->texture->hauteur;
     float u1 = (params->rect_source.x + ((params->rect_source.largeur > 0) ? params->rect_source.largeur : params->texture->largeur)) / params->texture->largeur;
     float v1 = (params->rect_source.y + ((params->rect_source.hauteur > 0) ? params->rect_source.hauteur : params->texture->hauteur)) / params->texture->hauteur;
 
-    // Ajout des 2 triangles (6 sommets) au buffer linéaire
     uint32_t i = renderer->vertex_count;
     renderer->vertex_buffer[i++] = (Vertex2D){ p0, {u0, v0}, params->teinte };
     renderer->vertex_buffer[i++] = (Vertex2D){ p1, {u1, v0}, params->teinte };
@@ -393,7 +400,6 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
         return DUAL_ERROR_INIT_FAILED;
     }
 
-    // Enregistrement de la structure de la Font dans la RAM
     uint64_t taille_ram = sizeof(struct DUAL_Font);
     DUAL_ResourceHandle* font_handle = NULL;
     if (resources) {
@@ -444,7 +450,6 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
         bitmap_rgba[idx*4 + 3] = bitmap_mono[idx];
     }
 
-    // L'atlas passera automatiquement par le tracker VRAM de DUAL_Texture_LoadFromMemory
     DUAL_Result res_tex = DUAL_Texture_LoadFromMemory(resources, bitmap_rgba, atlas_w, atlas_h, DUAL_FILTER_LINEAR, &font->texture_atlas);
 
     free(bitmap_mono);
@@ -462,7 +467,6 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
 
 void DUAL_Font_Destroy(DUAL_ResourceManager* resources, DUAL_Font* font) {
     if (font) {
-
         if (resources && font->handle) {
             DUAL_ResourceManager_Untrack(resources, font->handle);
         }
@@ -474,22 +478,13 @@ void DUAL_DrawText(DUAL_Renderer2D* renderer, const DUAL_Font* font, const char*
     if (!renderer || !font || !texte) return;
 
     float x = position.x;
-    float y = position.y + font->taille_pixels; // Alignement sur la baseline standard
+    float y = position.y + font->taille_pixels;
 
     while (*texte) {
         char c = *texte;
         if (c >= 32 && c < 128) {
             stbtt_bakedchar* bc = &font->données_caractères[c - 32];
 
-            /* CORRECTION BUG : certains glyphes (l'espace, notamment) ont une
-             * bounding box vide (x1==x0 et/ou y1==y0) dans l'atlas stb_truetype.
-             * Si on laissait passer un rect_source de largeur/hauteur nulle à
-             * DUAL_DrawSprite(), son mécanisme de fallback ("largeur <= 0 => on
-             * dessine la texture entière") se déclenchait et affichait l'atlas
-             * complet (tous les caractères ASCII) comme un seul énorme sprite
-             * à chaque espace. On saute simplement le dessin pour ces glyphes
-             * vides, tout en avançant quand même le curseur.
-             */
             if (bc->x1 > bc->x0 && bc->y1 > bc->y0) {
                 DUAL_SpriteParams p = {
                     .texture = font->texture_atlas,
@@ -532,19 +527,15 @@ void DUAL_MeasureText(const DUAL_Font* font, const char* texte, float* out_large
 void DUAL_DrawRect(DUAL_Renderer2D* renderer, DUAL_Rect rect, DUAL_Color couleur) {
     if (!renderer) return;
 
-    // Un rectangle plein de couleur unie n'utilise pas de texture.
-    // Si une texture était active dans le batch, on force un Flush pour dessiner les éléments précédents.
     if (renderer->texture_courante != NULL) {
         FlushBatch(renderer);
         renderer->texture_courante = NULL;
     }
 
-    // Sécurité débordement : un rectangle plein nécessite 2 triangles (6 sommets)
     if (renderer->vertex_count + 6 >= renderer->max_vertices) {
         FlushBatch(renderer);
     }
 
-    // Configuration du mode de mélange pour gérer l'opacité/transparence du rectangle
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -553,30 +544,68 @@ void DUAL_DrawRect(DUAL_Renderer2D* renderer, DUAL_Rect rect, DUAL_Color couleur
     float w = rect.largeur;
     float h = rect.hauteur;
 
-    // Coordonnées géométriques des 4 coins du rectangle plein
-    DUAL_Vec2 p0 = { x,     y };     // Haut - Gauche
-    DUAL_Vec2 p1 = { x + w, y };     // Haut - Droite
-    DUAL_Vec2 p2 = { x + w, y + h }; // Bas - Droite
-    DUAL_Vec2 p3 = { x,     y + h }; // Bas - Gauche
+    DUAL_Vec2 p0 = { x,     y };
+    DUAL_Vec2 p1 = { x + w, y };
+    DUAL_Vec2 p2 = { x + w, y + h };
+    DUAL_Vec2 p3 = { x,     y + h };
 
-    // Coordonnées UV neutres pour ne pas perturber le Fragment Shader
-    DUAL_Vec2 uv_neutre = { 0.0f, 0.0f };
+    // Coordonnées secrètes pour forcer le shader en mode "Rectangle plein"
+    DUAL_Vec2 uv_neutre = { -2.0f, -2.0f };
     uint32_t idx = renderer->vertex_count;
 
-    // Triangle 1 : Top-Left -> Top-Right -> Bottom-Right
     renderer->vertex_buffer[idx++] = (Vertex2D){ p0, uv_neutre, couleur };
     renderer->vertex_buffer[idx++] = (Vertex2D){ p1, uv_neutre, couleur };
     renderer->vertex_buffer[idx++] = (Vertex2D){ p2, uv_neutre, couleur };
 
-    // Triangle 2 : Top-Left -> Bottom-Right -> Bottom-Left
     renderer->vertex_buffer[idx++] = (Vertex2D){ p0, uv_neutre, couleur };
     renderer->vertex_buffer[idx++] = (Vertex2D){ p2, uv_neutre, couleur };
     renderer->vertex_buffer[idx++] = (Vertex2D){ p3, uv_neutre, couleur };
 
-    // Mise à jour du compteur de sommets du lot
     renderer->vertex_count = idx;
 }
 
 void DUAL_DrawCircleOutline(DUAL_Renderer2D* renderer, DUAL_Circle cercle, DUAL_Color couleur, int32_t segments) {
-    (void)renderer; (void)cercle; (void)couleur; (void)segments;
+    if (!renderer) return;
+    (void)segments; // Inutile maintenant, le GPU gère la perfection mathématique
+
+    if (renderer->texture_courante != NULL) {
+        FlushBatch(renderer);
+        renderer->texture_courante = NULL;
+    }
+
+    if (renderer->vertex_count + 6 >= renderer->max_vertices) {
+        FlushBatch(renderer);
+    }
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Calcul de la boîte englobante (carré)
+    float x0 = cercle.centre.x - cercle.rayon;
+    float y0 = cercle.centre.y - cercle.rayon;
+    float x1 = cercle.centre.x + cercle.rayon;
+    float y1 = cercle.centre.y + cercle.rayon;
+
+    DUAL_Vec2 p0 = { x0, y0 };
+    DUAL_Vec2 p1 = { x1, y0 };
+    DUAL_Vec2 p2 = { x1, y1 };
+    DUAL_Vec2 p3 = { x0, y1 };
+
+    // Coordonnées UV mappées de -1.0 à 1.0 (le fragment shader s'occupe de l'arrondi)
+    DUAL_Vec2 uv0 = { -1.0f, -1.0f };
+    DUAL_Vec2 uv1 = {  1.0f, -1.0f };
+    DUAL_Vec2 uv2 = {  1.0f,  1.0f };
+    DUAL_Vec2 uv3 = { -1.0f,  1.0f };
+
+    uint32_t idx = renderer->vertex_count;
+
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p0, uv0, couleur };
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p1, uv1, couleur };
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p2, uv2, couleur };
+
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p0, uv0, couleur };
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p2, uv2, couleur };
+    renderer->vertex_buffer[idx++] = (Vertex2D){ p3, uv3, couleur };
+
+    renderer->vertex_count = idx;
 }
