@@ -8,7 +8,7 @@
 #include "dual_utils.h"
 
 int main() {
-    DUAL_Log(DUAL_LOG_INFO, "Dual App started !");
+    DUAL_Log(DUAL_LOG_INFO, "Test Core started !");
 
     // On initialise l'application
     DUAL_App* app = NULL;

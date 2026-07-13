@@ -161,6 +161,12 @@ float DUAL_Vec2_Dot(DUAL_Vec2 a, DUAL_Vec2 b);
  */
 float DUAL_Vec2_Distance(DUAL_Vec2 a, DUAL_Vec2 b);
 
+/**
+ * @brief Affiche le vecteur en parametre
+ * @param v Point a afficher
+ */
+void DUAL_Vec2_Log(DUAL_Vec2 v);
+
 /* ============================================================================
  *  Opérations sur DUAL_Vec3
  * ========================================================================== */
@@ -218,6 +224,26 @@ float DUAL_Vec3_Length(DUAL_Vec3 v);
  * @return Vecteur normalisé. Retourne {0,0,0} si le vecteur source est nul.
  */
 DUAL_Vec3 DUAL_Vec3_Normalize(DUAL_Vec3 v);
+
+/**
+ * @brief Calcule la distance euclidienne entre deux points 3D.
+ * @param a Premier point.
+ * @param b Second point.
+ * @return Distance entre a et b.
+ */
+float DUAL_Vec3_Distance(DUAL_Vec3 a, DUAL_Vec3 b);
+
+/**
+ * @brief Affiche le vecteur en parametre
+ * @param v Point a afficher
+ */
+void DUAL_Vec3_Log(DUAL_Vec3 v);
+
+/**
+ * @brief Affiche le vecteur en parametre
+ * @param v Point a afficher
+ */
+void DUAL_Vec4_Log(DUAL_Vec4 v);
 
 /* ============================================================================
  *  Opérations matricielles (DUAL_Mat4)
@@ -297,6 +323,12 @@ DUAL_Mat4 DUAL_Mat4_Perspective(float fov_radians, float ratio_aspect,
  * @return Matrice de vue correspondante.
  */
 DUAL_Mat4 DUAL_Mat4_LookAt(DUAL_Vec3 position, DUAL_Vec3 cible, DUAL_Vec3 haut);
+
+/**
+ * @brief Affiche la matrice en parametre
+ * @param m Matrice a afficher
+ */
+void DUAL_Mat4_Log(DUAL_Mat4 m);
 
 /* ============================================================================
  *  Tests de collision

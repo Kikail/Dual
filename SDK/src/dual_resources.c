@@ -203,3 +203,13 @@ void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void*
         handle->callback_destruction = callback_destruction;
     }
 }
+
+void DUAL_ResourceManager_Log(DUAL_ResourceManager* manager) {
+    if (!manager) return;
+
+    DUAL_Log(DUAL_LOG_DEBUG, "========== DUAL_ResourceManager_Log ==========");
+    DUAL_Log(DUAL_LOG_DEBUG, "Resources[%u]", manager->nombre_ressources);
+    DUAL_Log(DUAL_LOG_DEBUG, "RAM[%lu/%lu](octets)", manager->ram_utilisee, manager->ram_totale);
+    DUAL_Log(DUAL_LOG_DEBUG, "VRAM[%lu/%lu](octets)", manager->vram_utilisee, manager->vram_totale);
+
+}

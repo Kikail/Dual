@@ -95,14 +95,26 @@ add_custom_command(TARGET game POST_BUILD
 # TESTS
 # ========================================================================
 
-# 1. On déclare le nouvel exécutable avec son main spécifique et le SDK
+# Test core
 add_executable(test_core Jeux/Testing/test_core.c ${SDK_SOURCES})
-
-# 2. On lui donne accès aux headers
 target_include_directories(test_core PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
-
-# 3. On lui lie les mêmes bibliothvèques si nécessaire
 target_link_libraries(test_core PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
+
+# Test resources
+add_executable(test_resources Jeux/Testing/test_resources.c ${SDK_SOURCES})
+target_include_directories(test_resources PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
+)
+target_link_libraries(test_resources PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
+
+# Test math
+add_executable(test_math Jeux/Testing/test_math.c ${SDK_SOURCES})
+target_include_directories(test_math PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
+)
+target_link_libraries(test_math PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)

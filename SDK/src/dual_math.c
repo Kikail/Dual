@@ -1,5 +1,6 @@
 #include "dual_math.h"
 #include <math.h>
+#include <stdio.h>
 
 /* ============================================================================
  * Opérations sur DUAL_Vec2
@@ -73,6 +74,13 @@ DUAL_Vec3 DUAL_Vec3_Normalize(DUAL_Vec3 v) {
     float len = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
     if (len == 0.0f) return (DUAL_Vec3){ 0.0f, 0.0f, 0.0f };
     return (DUAL_Vec3){ v.x / len, v.y / len, v.z / len };
+}
+
+float DUAL_Vec3_Distance(DUAL_Vec3 a, DUAL_Vec3 b) {
+    float dx = a.x - b.x;
+    float dy = a.y - b.y;
+    float dz = a.z - b.z;
+    return sqrtf(dx * dx + dy * dy + dz * dz);
 }
 
 /* ============================================================================
@@ -255,4 +263,21 @@ float DUAL_Clamp(float valeur, float min, float max) {
     if (valeur < min) return min;
     if (valeur > max) return max;
     return valeur;
+}
+
+/* LOG FUNCTIONS */
+void DUAL_Vec2_Log(DUAL_Vec2 v) {
+    printf("(%f, %f)", v.x, v.y);
+}
+void DUAL_Vec3_Log(DUAL_Vec3 v) {
+    printf("(%f, %f, %f)", v.x, v.y, v.z);
+}
+void DUAL_Vec4_Log(DUAL_Vec4 v) {
+    printf("(%f, %f, %f, %f)", v.x, v.y, v.z, v.w);
+}
+void DUAL_Mat4_Log(DUAL_Mat4 m) {
+    printf("[%f, %f, %f, %f]\n", m.m[0], m.m[1], m.m[2], m.m[3]);
+    printf("[%f, %f, %f, %f]\n", m.m[4], m.m[5], m.m[6], m.m[7]);
+    printf("[%f, %f, %f, %f]\n", m.m[8], m.m[9], m.m[10], m.m[11]);
+    printf("[%f, %f, %f, %f]", m.m[12], m.m[13], m.m[14], m.m[15]);
 }

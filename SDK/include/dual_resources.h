@@ -65,7 +65,8 @@ typedef enum DUAL_ResourceCategory {
     DUAL_RESOURCE_MODEL_3D  = 1, /**< Modèle 3D (géométrie, OBJ importé). */
     DUAL_RESOURCE_SOUND     = 2, /**< Son chargé intégralement en mémoire. */
     DUAL_RESOURCE_MUSIC     = 3, /**< Flux musical en streaming. */
-    DUAL_RESOURCE_AUTRE     = 4  /**< Ressource générique non catégorisée. */
+    DUAL_RESOURCE_STRUCT    = 4, /**< Structure personnalisee comme par exemple un personnage. */
+    DUAL_RESOURCE_AUTRE     = 5  /**< Ressource générique non catégorisée. */
 } DUAL_ResourceCategory;
 
 /* ============================================================================
@@ -182,7 +183,28 @@ void DUAL_ResourceManager_SetRAMBudget(DUAL_ResourceManager* manager, uint64_t l
  */
 void DUAL_ResourceManager_PurgeCategory(DUAL_ResourceManager* manager, DUAL_ResourceCategory categorie);
 
+/**
+ * @brief Force le déchargement de toutes les ressources.
+ *
+ * Utile par exemple pour vider toutes les ressources d'un niveau avant
+ * de charger le niveau suivant.
+ *
+ * @param manager Gestionnaire de ressources.
+ */
 void DUAL_ResourceManager_PurgeAll(DUAL_ResourceManager* manager);
+
+/* ============================================================================
+ *  Logging
+ * ========================================================================== */
+
+/**
+ * @brief Affiche toutes les ressources trackees
+ *
+ * Utile par exemple pour voir tout ce qui est stocker dans le resourceManager
+ *
+ * @param manager Gestionnaire de ressources.
+ */
+void DUAL_ResourceManager_Log(DUAL_ResourceManager* manager);
 
 #ifdef __cplusplus
 }
