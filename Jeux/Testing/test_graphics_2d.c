@@ -1,6 +1,7 @@
 //
 // Created by killian on 7/9/26.
 //
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -120,6 +121,9 @@ int main() {
     // Boucle du jeu principal
     while (DUAL_ShouldRun(app)) {
         DUAL_BeginFrame(app);
+
+        // On deplace la camera
+        DUAL_Renderer2D_SetCameraPosition(renderer2D, (DUAL_Vec2){0.0, 200 * sin(DUAL_GetTime(app))});
 
         // On selectionne l'ecran du bas
         DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);

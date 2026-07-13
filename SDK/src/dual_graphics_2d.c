@@ -300,6 +300,16 @@ static void FlushBatch(DUAL_Renderer2D* renderer) {
     renderer->vertex_count = 0;
 }
 
+void DUAL_Renderer2D_SetCameraPosition(DUAL_Renderer2D* renderer, DUAL_Vec2 position) {
+    renderer->camera_pos = position;
+}
+void DUAL_Renderer2D_SetCameraZoom(DUAL_Renderer2D* renderer, float zoom) {
+    renderer->camera_zoom = zoom;
+}
+void DUAL_Renderer2D_SetCameraRotation(DUAL_Renderer2D* renderer, float rotation_radians) {
+    renderer->camera_rotation = rotation_radians;
+}
+
 void DUAL_Renderer2D_Begin(DUAL_Renderer2D* renderer) {
     if (renderer) {
         renderer->vertex_count = 0;
