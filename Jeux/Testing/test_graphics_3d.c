@@ -39,15 +39,10 @@ int main() {
     DUAL_ResourceManager* resourceManager = NULL;
     DUAL_ResourceManager_Create(app, &resourceManager);
 
-    // On charge des ressources
     DUAL_Model* ambulanceModel = NULL;
-    DUAL_Texture* diffuseTexture = NULL;
-    result = DUAL_Model_Load(resourceManager, MODEL_CHARACTER_PATH, &ambulanceModel);
-    DEBUG_DUAL_RESULT(result);
-    result = DUAL_Texture_LoadFromFile(resourceManager, TEXTURE_DEFAULT_PATH, DUAL_FILTER_NEAREST, &diffuseTexture);
-    DEBUG_DUAL_RESULT(result);
-    DUAL_Material* ambulanceMaterial = NULL;
-    result = DUAL_Material_Create(resourceManager, diffuseTexture, &ambulanceMaterial);
+    DUAL_Material** materials = NULL;
+    unsigned int materialCount = 0;
+    result = DUAL_Model_Load(resourceManager, MODEL_CHARACTER_PATH, &ambulanceModel, &materialCount, &materials);
     DEBUG_DUAL_RESULT(result);
 
     Animation* animation = NULL;
@@ -138,7 +133,7 @@ int main() {
 
         // On dessine nos images
         DUAL_Renderer3D_Begin(renderer3D);
-        DUAL_DrawAnimatedModel(renderer3D, ambulanceModel, ambulanceMaterial, ambulanceTransform3D, &animator);
+        DUAL_DrawAnimatedModel(renderer3D, ambulanceModel, materials, ambulanceTransform3D, &animator);
         DUAL_Renderer3D_End(renderer3D);
 
         DUAL_EndFrame(app);

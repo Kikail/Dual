@@ -24,6 +24,7 @@ extern "C" {
  *  Types opaques et Déclarations
  * ========================================================================== */
 
+typedef struct DUAL_Mesh DUAL_Mesh;
 typedef struct DUAL_Model DUAL_Model;
 typedef struct DUAL_Material DUAL_Material;
 typedef struct DUAL_Renderer3D DUAL_Renderer3D;
@@ -141,9 +142,10 @@ struct Animator {
  *  Chargement et gestion des modèles
  * ========================================================================== */
 
-DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model);
+DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials);
 void DUAL_Model_Destroy(DUAL_ResourceManager* resources, DUAL_Model* model);
 DUAL_AABB DUAL_Model_GetBoundingBox(const DUAL_Model* model);
+uint32_t DUAL_Model_GetMeshCount(const DUAL_Model* model);
 
 /* ============================================================================
  *  Matériaux
@@ -188,11 +190,11 @@ void DUAL_Renderer3D_SetLight(DUAL_Renderer3D* renderer, int32_t index, DUAL_Lig
 void DUAL_Renderer3D_SetAmbientLight(DUAL_Renderer3D* renderer, DUAL_Vec3 couleur_ambiante);
 
 /* ============================================================================
- *  Dessin
+ *  Dessin (Mise à jour : Tableau de pointeurs de matériaux par mesh)
  * ========================================================================== */
 
-void DUAL_DrawModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material* material, DUAL_Transform3D transform);
-void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material* material, DUAL_Transform3D transform, Animator* animator);
+void DUAL_DrawModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material** materials, DUAL_Transform3D transform);
+void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material** materials, DUAL_Transform3D transform, Animator* animator);
 
 #ifdef __cplusplus
 }

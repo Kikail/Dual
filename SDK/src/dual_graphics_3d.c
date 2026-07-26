@@ -34,11 +34,20 @@ typedef struct {
     DUAL_Mat4 offset;
 } BoneInfo;
 
-struct DUAL_Model {
+struct DUAL_Mesh {
     GLuint   vao, vbo, ebo;
     uint32_t index_count;
-    DUAL_AABB bounding_box_local;
+    uint32_t material_index;
+};
+
+struct DUAL_Model {
+    DUAL_Mesh* meshes;
+    uint32_t   mesh_count;
+    DUAL_AABB  bounding_box_local;
     DUAL_ResourceHandle* handle;
+
+    DUAL_Material** materials;
+    unsigned int material_count;
 
     BoneInfo* m_BoneInfoMap;
     int m_BoneCounter;
@@ -59,7 +68,6 @@ struct DUAL_Renderer3D {
     GLuint shader_unlit;
     GLuint shader_skeleton;
     GLuint shader_skeleton_unlit;
-
 
     /* État de rendu */
     DUAL_RenderMode3D render_mode;
@@ -265,10 +273,8 @@ DUAL_Result DUAL_Animation_Load(const char* path, DUAL_Model* model, Animation**
     anim->m_TicksPerSecond = aiAnim->mTicksPerSecond != 0 ? (int)aiAnim->mTicksPerSecond : 25;
     anim->m_LinkedModel = model;
 
-    // 1. Lire la hiérarchie
     ReadHierarchyData(&anim->m_RootNode, scene->mRootNode);
 
-    // 2. Extraire les os et les clefs d'animation
     anim->m_NumBones = aiAnim->mNumChannels;
     anim->m_Bones = malloc(sizeof(Bone) * anim->m_NumBones);
 
@@ -349,8 +355,11 @@ static void Animator_CalculateBoneTransform(Animator* animator, const AssimpNode
     for (int i = 0; i < model->m_BoneCounter; i++) {
         if (strcmp(model->m_BoneInfoMap[i].name, nodeName) == 0) {
             int boneID = model->m_BoneInfoMap[i].id;
-            DUAL_Mat4 offset = model->m_BoneInfoMap[i].offset;
-            animator->m_FinalBoneMatrices[boneID] = DUAL_Mat4_Multiply(globalTransformation, offset);
+            // FIX 5: Vérifier que boneID ne dépasse pas MAX_BONES (100)
+            if (boneID >= 0 && boneID < MAX_BONES) {
+                DUAL_Mat4 offset = model->m_BoneInfoMap[i].offset;
+                animator->m_FinalBoneMatrices[boneID] = DUAL_Mat4_Multiply(globalTransformation, offset);
+            }
             break;
         }
     }
@@ -542,10 +551,10 @@ static void ApplyCullMode3D(DUAL_CullMode mode) {
 }
 
 /* ============================================================================
- * GESTION ET CHARGEMENT DES MODÈLES
+ * GESTION ET CHARGEMENT DES MODÈLES (MAINTENANT MESH PAR MESH)
  * ========================================================================== */
 
-static DUAL_Result DUAL_Model_LoadInternal(const char* chemin_fichier, DUAL_Model** out_model) {
+DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials) {
     if (!chemin_fichier || !out_model) return DUAL_ERROR_INVALID_ARG;
 
     const unsigned int flags_assimp = aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_GenSmoothNormals | aiProcess_FlipUVs;
@@ -556,17 +565,11 @@ static DUAL_Result DUAL_Model_LoadInternal(const char* chemin_fichier, DUAL_Mode
         return DUAL_ERROR_NOT_FOUND;
     }
 
-    uint32_t total_vertices = 0, total_indices = 0;
-    for (unsigned int m = 0; m < scene->mNumMeshes; m++) {
-        total_vertices += scene->mMeshes[m]->mNumVertices;
-        total_indices  += scene->mMeshes[m]->mNumFaces * 3;
-    }
-
-    Vertex3D* vertices = malloc(sizeof(Vertex3D) * total_vertices);
-    uint32_t* indices  = malloc(sizeof(uint32_t) * total_indices);
-
     DUAL_Model* model = malloc(sizeof(struct DUAL_Model));
     model->handle = NULL;
+    model->mesh_count = scene->mNumMeshes;
+    model->meshes = malloc(sizeof(DUAL_Mesh) * model->mesh_count);
+
     model->m_BoneCounter = 0;
     model->m_BoneMapCapacity = MAX_BONES;
     model->m_BoneInfoMap = malloc(sizeof(BoneInfo) * model->m_BoneMapCapacity);
@@ -574,15 +577,65 @@ static DUAL_Result DUAL_Model_LoadInternal(const char* chemin_fichier, DUAL_Mode
     DUAL_Vec3 bb_min = {  FLT_MAX,  FLT_MAX,  FLT_MAX };
     DUAL_Vec3 bb_max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
-    uint32_t vertex_cursor = 0;
-    uint32_t index_cursor  = 0;
+    // FIX 1: Utilisation de calloc au lieu de malloc pour initialiser tous les pointeurs à NULL
+    model->materials = calloc(scene->mNumMaterials, sizeof(DUAL_Material*));
+    model->material_count = scene->mNumMaterials;
 
+    for (unsigned int i = 0; i < scene->mNumMaterials; i++) {
+        const struct aiMaterial* material = scene->mMaterials[i];
+
+        struct aiString matName;
+        if (aiGetMaterialString(material, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS) {
+            DUAL_Log(DUAL_LOG_INFO, "Matériau [%u] : %s", i, matName.data);
+        }
+
+        struct aiString texPath;
+        char texPathBuffer[512] = {0};
+
+        if (aiGetMaterialTexture(material, aiTextureType_DIFFUSE, 0, &texPath, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {
+            DUAL_Log(DUAL_LOG_INFO, "  -> Texture diffuse trouvée : %s", texPath.data);
+
+            const char* last_slash = strrchr(chemin_fichier, '/');
+            const char* last_backslash = strrchr(chemin_fichier, '\\');
+            const char* last_sep = (last_slash > last_backslash) ? last_slash : last_backslash;
+
+            if (last_sep != NULL) {
+                size_t dir_len = (size_t)(last_sep - chemin_fichier + 1);
+                if (dir_len < sizeof(texPathBuffer)) {
+                    strncpy(texPathBuffer, chemin_fichier, dir_len);
+                    texPathBuffer[dir_len] = '\0';
+                }
+            }
+
+            strncat(texPathBuffer, texPath.data, sizeof(texPathBuffer) - strlen(texPathBuffer) - 1);
+
+            DUAL_Texture* texture = NULL;
+            DUAL_Result result = DUAL_Texture_LoadFromFile(resources, texPathBuffer, DUAL_FILTER_NEAREST, &texture);
+            if (result != DUAL_OK) {
+                DUAL_Log(DUAL_LOG_WARNING, "Failed to load %s", texPathBuffer);
+                continue;
+            }
+
+            DUAL_Material_Create(resources, texture, &model->materials[i]);
+        } else {
+            DUAL_Log(DUAL_LOG_INFO, "  -> Aucune texture diffuse");
+        }
+    }
+
+    // FIX 2: Dereferencer proprement le pointeur de sortie pour affecter la variable du caller
+    if (out_material_count) *out_material_count = model->material_count;
+    if (out_materials) *out_materials = model->materials;
+
+    // Chargement indépendant de chaque Mesh
     for (unsigned int m = 0; m < scene->mNumMeshes; m++) {
         const struct aiMesh* mesh = scene->mMeshes[m];
-        const uint32_t base_vertex = vertex_cursor;
+
+        Vertex3D* vertices = malloc(sizeof(Vertex3D) * mesh->mNumVertices);
+        uint32_t num_indices = mesh->mNumFaces * 3;
+        uint32_t* indices = malloc(sizeof(uint32_t) * num_indices);
 
         for (unsigned int v = 0; v < mesh->mNumVertices; v++) {
-            SetVertexBoneDataToDefault(&vertices[vertex_cursor]);
+            SetVertexBoneDataToDefault(&vertices[v]);
             DUAL_Vec3 pos = { mesh->mVertices[v].x, mesh->mVertices[v].y, mesh->mVertices[v].z };
 
             DUAL_Vec3 normale = { 0.0f, 1.0f, 0.0f };
@@ -595,77 +648,92 @@ static DUAL_Result DUAL_Model_LoadInternal(const char* chemin_fichier, DUAL_Mode
                 uv = (DUAL_Vec2){ mesh->mTextureCoords[0][v].x, mesh->mTextureCoords[0][v].y };
             }
 
-            vertices[vertex_cursor].position   = pos;
-            vertices[vertex_cursor].normale    = normale;
-            vertices[vertex_cursor].tex_coords = uv;
+            vertices[v].position   = pos;
+            vertices[v].normale    = normale;
+            vertices[v].tex_coords = uv;
 
             if (pos.x < bb_min.x) bb_min.x = pos.x; if (pos.x > bb_max.x) bb_max.x = pos.x;
             if (pos.y < bb_min.y) bb_min.y = pos.y; if (pos.y > bb_max.y) bb_max.y = pos.y;
             if (pos.z < bb_min.z) bb_min.z = pos.z; if (pos.z > bb_max.z) bb_max.z = pos.z;
-            vertex_cursor++;
         }
 
+        uint32_t index_cursor = 0;
         for (unsigned int f = 0; f < mesh->mNumFaces; f++) {
             for (unsigned int k = 0; k < mesh->mFaces[f].mNumIndices; k++) {
-                indices[index_cursor++] = base_vertex + mesh->mFaces[f].mIndices[k];
+                indices[index_cursor++] = mesh->mFaces[f].mIndices[k];
             }
         }
-        ExtractBoneWeightForVertices(model, vertices, mesh->mNumVertices, (struct aiMesh*)mesh, scene, base_vertex);
+
+        ExtractBoneWeightForVertices(model, vertices, mesh->mNumVertices, (struct aiMesh*)mesh, scene, 0);
+
+        model->meshes[m].index_count = index_cursor;
+        model->meshes[m].material_index = mesh->mMaterialIndex;
+
+        glGenVertexArrays(1, &model->meshes[m].vao);
+        glGenBuffers(1, &model->meshes[m].vbo);
+        glGenBuffers(1, &model->meshes[m].ebo);
+
+        glBindVertexArray(model->meshes[m].vao);
+
+        glBindBuffer(GL_ARRAY_BUFFER, model->meshes[m].vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex3D) * mesh->mNumVertices, vertices, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->meshes[m].ebo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * index_cursor, indices, GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, position)); glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, normale)); glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, tex_coords)); glEnableVertexAttribArray(2);
+
+        glVertexAttribIPointer(3, 4, GL_INT, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_BoneIDs)); glEnableVertexAttribArray(3);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_Weights)); glEnableVertexAttribArray(4);
+
+        glBindVertexArray(0);
+
+        free(vertices);
+        free(indices);
     }
 
     aiReleaseImport(scene);
 
-    model->index_count = index_cursor;
     model->bounding_box_local.min = bb_min;
     model->bounding_box_local.max = bb_max;
-
-    glGenVertexArrays(1, &model->vao);
-    glGenBuffers(1, &model->vbo);
-    glGenBuffers(1, &model->ebo);
-    glBindVertexArray(model->vao);
-    glBindBuffer(GL_ARRAY_BUFFER, model->vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex3D) * vertex_cursor, vertices, GL_STATIC_DRAW);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * index_cursor, indices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, position)); glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, normale)); glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, tex_coords)); glEnableVertexAttribArray(2);
-
-    glVertexAttribIPointer(3, 4, GL_INT, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_BoneIDs)); glEnableVertexAttribArray(3);
-    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_Weights)); glEnableVertexAttribArray(4);
-
-    glBindVertexArray(0);
-    free(vertices);
-    free(indices);
 
     *out_model = model;
     return DUAL_OK;
 }
 
-DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model) {
-    (void)resources;
-    return DUAL_Model_LoadInternal(chemin_fichier, out_model);
-}
-
 void DUAL_Model_Destroy(DUAL_ResourceManager* resources, DUAL_Model* model) {
     (void)resources;
     if (!model) return;
-    glDeleteVertexArrays(1, &model->vao);
-    glDeleteBuffers(1, &model->vbo);
-    glDeleteBuffers(1, &model->ebo);
+
+    if (model->meshes) {
+        for (uint32_t i = 0; i < model->mesh_count; i++) {
+            glDeleteVertexArrays(1, &model->meshes[i].vao);
+            glDeleteBuffers(1, &model->meshes[i].vbo);
+            glDeleteBuffers(1, &model->meshes[i].ebo);
+        }
+        free(model->meshes);
+    }
+
     if (model->m_BoneInfoMap) {
         for (int i = 0; i < model->m_BoneCounter; i++) {
             free(model->m_BoneInfoMap[i].name);
         }
         free(model->m_BoneInfoMap);
     }
+    free(model->materials);
     free(model);
 }
 
 DUAL_AABB DUAL_Model_GetBoundingBox(const DUAL_Model* model) {
     if (!model) return (DUAL_AABB){{0,0,0}, {0,0,0}};
     return model->bounding_box_local;
+}
+
+uint32_t DUAL_Model_GetMeshCount(const DUAL_Model* model) {
+    if (!model) return 0;
+    return model->mesh_count;
 }
 
 /* ============================================================================
@@ -745,6 +813,7 @@ void DUAL_Renderer3D_Destroy(DUAL_Renderer3D* renderer) {
     if (renderer->shader_lit) glDeleteProgram(renderer->shader_lit);
     if (renderer->shader_unlit) glDeleteProgram(renderer->shader_unlit);
     if (renderer->shader_skeleton) glDeleteProgram(renderer->shader_skeleton);
+    if (renderer->shader_skeleton_unlit) glDeleteProgram(renderer->shader_skeleton_unlit);
     free(renderer);
 }
 
@@ -859,15 +928,22 @@ void DUAL_Renderer3D_End(DUAL_Renderer3D* renderer) {
  * FONCTIONS DE DESSIN
  * ========================================================================== */
 
-void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material* material, DUAL_Transform3D transform, Animator* animator) {
+void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material** materials, DUAL_Transform3D transform, Animator* animator) {
     if (!renderer || !model) {
-        DUAL_Log(DUAL_LOG_ERROR, "DUAL_DrawAnimatedModel model or renderer is NULL");
+        DUAL_Log(DUAL_LOG_ERROR, "DUAL_DrawAnimatedModel: renderer or model is NULL");
         return;
     }
 
-    GLuint active_shader = animator ? renderer->shader_skeleton : renderer->shader_lit;
-    if (renderer->render_mode == DUAL_RENDER_UNLIT) {
-        active_shader = renderer->shader_skeleton_unlit;
+    // FIX 3: Si 'materials' passe NULL, on bascule automatiquement sur les matériaux internes du modèle
+    if (!materials) {
+        materials = (const DUAL_Material**)model->materials;
+    }
+
+    GLuint active_shader;
+    if (animator) {
+        active_shader = (renderer->render_mode == DUAL_RENDER_UNLIT) ? renderer->shader_skeleton_unlit : renderer->shader_skeleton;
+    } else {
+        active_shader = (renderer->render_mode == DUAL_RENDER_UNLIT) ? renderer->shader_unlit : renderer->shader_lit;
     }
 
     glUseProgram(active_shader);
@@ -889,17 +965,31 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
         }
     }
 
-    if (material && material->texture_diffuse) {
-        glUniform1f(glGetUniformLocation(active_shader, "uMaterial.shininess"), material->brillance);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, DUAL_Internal_GetTextureID(material->texture_diffuse));
+    // Rendu individuel de chaque Mesh
+    for (uint32_t i = 0; i < model->mesh_count; i++) {
+        const DUAL_Material* material = NULL;
+        uint32_t mat_idx = model->meshes[i].material_index;
+
+        // FIX 4: Vérification des bornes du tableau de matériaux
+        if (materials && mat_idx < model->material_count) {
+            material = materials[mat_idx];
+        }
+
+        if (material && material->texture_diffuse) {
+            glUniform1f(glGetUniformLocation(active_shader, "uMaterial.shininess"), material->brillance);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, DUAL_Internal_GetTextureID(material->texture_diffuse));
+        } else {
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
+        glBindVertexArray(model->meshes[i].vao);
+        glDrawElements(GL_TRIANGLES, (GLsizei)model->meshes[i].index_count, GL_UNSIGNED_INT, 0);
     }
 
-    glBindVertexArray(model->vao);
-    glDrawElements(GL_TRIANGLES, (GLsizei)model->index_count, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
 }
 
-void DUAL_DrawModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material* material, DUAL_Transform3D transform) {
-    DUAL_DrawAnimatedModel(renderer, model, material, transform, NULL);
+void DUAL_DrawModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material** materials, DUAL_Transform3D transform) {
+    DUAL_DrawAnimatedModel(renderer, model, materials, transform, NULL);
 }
