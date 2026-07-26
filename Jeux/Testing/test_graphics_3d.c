@@ -12,6 +12,12 @@
 #include "dual_resources.h"
 #include "dual_utils.h"
 
+#define MODEL_AMBULANCE_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/cars/OBJ format/ambulance.obj"
+#define MODEL_FIRETRUCK_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/cars/OBJ format/firetruck.obj"
+#define MODEL_CHARACTER_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/skeletalModels/Remy.dae"
+#define TEXTURE_DEFAULT_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/skeletalModels/default_texture.png"
+#define ANIMATION_DANCE_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/skeletalModels/Capoeira.dae
+#define ANIMATION_DANCE_2_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/skeletalModels/Hip Hop Dancing.dae"
 
 int main() {
     DUAL_Log(DUAL_LOG_INFO, "Test Graphics 2D started !");
@@ -36,19 +42,25 @@ int main() {
     // On charge des ressources
     DUAL_Model* ambulanceModel = NULL;
     DUAL_Texture* diffuseTexture = NULL;
-    result = DUAL_Model_LoadFromOBJ(resourceManager, "/home/killian/CLionProjects/Dual/Jeux/resources/3D/cars/OBJ format/ambulance.obj", &ambulanceModel);
+    result = DUAL_Model_Load(resourceManager, MODEL_CHARACTER_PATH, &ambulanceModel);
     DEBUG_DUAL_RESULT(result);
-    result = DUAL_Texture_LoadFromFile(resourceManager, "/home/killian/CLionProjects/Dual/Jeux/resources/3D/cars/OBJ format/Textures/colormap.png", DUAL_FILTER_LINEAR, &diffuseTexture);
+    result = DUAL_Texture_LoadFromFile(resourceManager, TEXTURE_DEFAULT_PATH, DUAL_FILTER_NEAREST, &diffuseTexture);
     DEBUG_DUAL_RESULT(result);
     DUAL_Material* ambulanceMaterial = NULL;
     result = DUAL_Material_Create(resourceManager, diffuseTexture, &ambulanceMaterial);
     DEBUG_DUAL_RESULT(result);
 
-    // Position 3D de notre ambulance
+    Animation* animation = NULL;
+    result = DUAL_Animation_Load(ANIMATION_DANCE_2_PATH, ambulanceModel, &animation);
+    DEBUG_DUAL_RESULT(result);
+    Animator animator;
+    Animator_Init(&animator, animation);
+
+    // Ajuster la position/échelle du personnage
     DUAL_Transform3D ambulanceTransform3D = {
-        .position = {0.0,-2.0,-5.0},
-        .echelle = {1.0,1.0,1.0},
-        .rotation_euler_radians = {0.0,0.0,0.0},
+        .position = {0.0, -2.0, -5.0},
+        .echelle = {1.0, 1.0, 1.0}, // Ajustez selon la taille réelle du modèle
+        .rotation_euler_radians = {0.0, 0.0, 0.0},
     };
 
     // On affiche les stats de notre resource manager
@@ -113,7 +125,7 @@ int main() {
         }
 
         // Actualisation de nos structures
-        ambulanceTransform3D.rotation_euler_radians = (DUAL_Vec3){0.0, DUAL_GetTime(app),  0.0};
+        Animator_UpdateAnimation(&animator, DUAL_GetDeltaTime(app));
 
         // On selectionne l'ecran du bas
         DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);
@@ -126,7 +138,7 @@ int main() {
 
         // On dessine nos images
         DUAL_Renderer3D_Begin(renderer3D);
-        DUAL_DrawModel(renderer3D, ambulanceModel, ambulanceMaterial, ambulanceTransform3D);
+        DUAL_DrawAnimatedModel(renderer3D, ambulanceModel, ambulanceMaterial, ambulanceTransform3D, &animator);
         DUAL_Renderer3D_End(renderer3D);
 
         DUAL_EndFrame(app);

@@ -1,7 +1,7 @@
 /**
  * @file dual_graphics_3d.h
- * @brief Module de rendu 3D de libdual : chargement de modèles (format OBJ),
- *        gestion des matériaux, éclairage de base et caméra 3D.
+ * @brief Module de rendu 3D de libdual : chargement de modèles,
+ *        gestion des matériaux, éclairage, caméra et système d'animation squelettique.
  */
 
 #ifndef DUAL_GRAPHICS_3D_H
@@ -18,16 +18,26 @@
 extern "C" {
 #endif
 
+#define MAX_BONES 100
+
 /* ============================================================================
- *  Types opaques
+ *  Types opaques et Déclarations
  * ========================================================================== */
 
 typedef struct DUAL_Model DUAL_Model;
 typedef struct DUAL_Material DUAL_Material;
 typedef struct DUAL_Renderer3D DUAL_Renderer3D;
 
+typedef struct KeyPosition KeyPosition;
+typedef struct KeyRotation KeyRotation;
+typedef struct KeyScale KeyScale;
+typedef struct Bone Bone;
+typedef struct AssimpNodeData AssimpNodeData;
+typedef struct Animation Animation;
+typedef struct Animator Animator;
+
 /* ============================================================================
- *  Enumérations
+ *  Énumérations
  * ========================================================================== */
 
 typedef enum DUAL_LightType {
@@ -36,7 +46,7 @@ typedef enum DUAL_LightType {
 } DUAL_LightType;
 
 typedef enum DUAL_ProjectionMode3D {
-    DUAL_PROJECTION_PERSPECTIVE = 0,
+    DUAL_PROJECTION_PERSPECTIVE  = 0,
     DUAL_PROJECTION_ORTHOGRAPHIC = 1
 } DUAL_ProjectionMode3D;
 
@@ -71,11 +81,67 @@ typedef struct DUAL_Transform3D {
     DUAL_Vec3 echelle;
 } DUAL_Transform3D;
 
+/* Structures de gestion de l'animation */
+
+struct KeyPosition {
+    DUAL_Vec3 position;
+    float timeStamp;
+};
+
+struct KeyRotation {
+    DUAL_Quat orientation;
+    float timeStamp;
+};
+
+struct KeyScale {
+    DUAL_Vec3 scale;
+    float timeStamp;
+};
+
+struct Bone {
+    KeyPosition* m_Positions;
+    KeyRotation* m_Rotations;
+    KeyScale*    m_Scales;
+    int m_NumPositions;
+    int m_NumRotations;
+    int m_NumScalings;
+
+    DUAL_Mat4 m_LocalTransform;
+    char* m_Name;
+    int m_ID;
+};
+
+struct AssimpNodeData {
+    DUAL_Mat4 transformation;
+    char* name;
+    int childrenCount;
+    struct AssimpNodeData* children;
+};
+
+struct Animation {
+    float m_Duration;
+    int m_TicksPerSecond;
+
+    Bone* m_Bones;
+    int m_NumBones;
+
+    AssimpNodeData m_RootNode;
+
+    DUAL_Model* m_LinkedModel;
+};
+
+struct Animator {
+    DUAL_Mat4 m_FinalBoneMatrices[MAX_BONES];
+    Animation* m_CurrentAnimation;
+    float m_CurrentTime;
+    float m_DeltaTime;
+};
+
 /* ============================================================================
  *  Chargement et gestion des modèles
  * ========================================================================== */
 
-DUAL_Result DUAL_Model_LoadFromOBJ(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model);
+DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model);
 void DUAL_Model_Destroy(DUAL_ResourceManager* resources, DUAL_Model* model);
 DUAL_AABB DUAL_Model_GetBoundingBox(const DUAL_Model* model);
 
@@ -86,6 +152,15 @@ DUAL_AABB DUAL_Model_GetBoundingBox(const DUAL_Model* model);
 DUAL_Result DUAL_Material_Create(DUAL_ResourceManager* resources, DUAL_Texture* texture_diffuse, DUAL_Material** out_material);
 void DUAL_Material_Destroy(DUAL_ResourceManager* resources, DUAL_Material* material);
 void DUAL_Material_SetShininess(DUAL_Material* material, float brillance);
+
+/* ============================================================================
+ *  Animations & Bones
+ * ========================================================================== */
+
+DUAL_Result DUAL_Animation_Load(const char* path, DUAL_Model* model, Animation** out_animation);
+void Animator_Init(Animator* animator, Animation* animation);
+void Animator_UpdateAnimation(Animator* animator, float dt);
+void Bone_Update(Bone* bone, float animationTime);
 
 /* ============================================================================
  *  Renderer 3D et caméra
@@ -117,6 +192,7 @@ void DUAL_Renderer3D_SetAmbientLight(DUAL_Renderer3D* renderer, DUAL_Vec3 couleu
  * ========================================================================== */
 
 void DUAL_DrawModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material* material, DUAL_Transform3D transform);
+void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material* material, DUAL_Transform3D transform, Animator* animator);
 
 #ifdef __cplusplus
 }
