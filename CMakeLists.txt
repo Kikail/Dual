@@ -59,8 +59,11 @@ find_package(PkgConfig REQUIRED)
 find_package(assimp REQUIRED)
 pkg_check_modules(GLFW REQUIRED glfw3)
 find_package(OpenGL REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(OPUS REQUIRED opus opusfile)
+include_directories(${OPUS_INCLUDE_DIRS})
 
-target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
+target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
 
 
 # ========================================================================
@@ -142,4 +145,12 @@ target_include_directories(test_fs PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
 target_link_libraries(test_fs PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
+
+# Test Audio
+add_executable(test_audio Jeux/Testing/test_audio.c ${SDK_SOURCES})
+target_include_directories(test_audio PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
+)
+target_link_libraries(test_audio PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
 
