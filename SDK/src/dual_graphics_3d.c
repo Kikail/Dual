@@ -4,6 +4,7 @@
 #include <string.h>
 #include <float.h>
 #include <math.h>
+#include <stdint.h> /* Ajout pour int8_t */
 
 #include <glad/glad.h>
 
@@ -23,6 +24,7 @@ extern GLuint DUAL_Internal_GetTextureID(const DUAL_Texture* texture);
 
 #define DUAL_MAX_LIGHTS_3D 4
 #define MAX_BONE_INFLUENCE 4
+#define MAX_BONES 100
 
 /* ============================================================================
  * Définition des structures opaques
@@ -60,14 +62,32 @@ struct DUAL_Material {
     DUAL_ResourceHandle* handle;
 };
 
+/* --- OPTIMISATION : Cache des Uniforms --- */
+typedef struct {
+    GLuint program;
+    GLint  uModel;
+    GLint  uMaterial_shininess;
+    GLint  uAmbientLight;
+    GLint  uViewPos;
+    struct {
+        GLint type, position, direction, color, intensity, range;
+    } lights[DUAL_MAX_LIGHTS_3D];
+} DUAL_ShaderState;
+
 struct DUAL_Renderer3D {
     DUAL_App* app;
 
-    /* Shaders */
-    GLuint shader_lit;
-    GLuint shader_unlit;
-    GLuint shader_skeleton;
-    GLuint shader_skeleton_unlit;
+    /* Shaders & Caches */
+    DUAL_ShaderState shader_lit;
+    DUAL_ShaderState shader_unlit;
+    DUAL_ShaderState shader_skeleton;
+    DUAL_ShaderState shader_skeleton_unlit;
+
+    DUAL_ShaderState* active_shaders[4];
+
+    /* UBOs pour GLES 3.1 */
+    GLuint ubo_camera; /* Binding 0: uProjection, uView */
+    GLuint ubo_bones;  /* Binding 1: finalBonesMatrices */
 
     /* État de rendu */
     DUAL_RenderMode3D render_mode;
@@ -91,12 +111,13 @@ struct DUAL_Renderer3D {
     DUAL_Light lights[DUAL_MAX_LIGHTS_3D];
 };
 
+/* --- OPTIMISATION : Réduction de la taille des vertices --- */
 typedef struct {
     DUAL_Vec3 position;
     DUAL_Vec3 normale;
     DUAL_Vec2 tex_coords;
-    int m_BoneIDs[MAX_BONE_INFLUENCE];
-    float m_Weights[MAX_BONE_INFLUENCE];
+    float  m_Weights[MAX_BONE_INFLUENCE];
+    int8_t m_BoneIDs[MAX_BONE_INFLUENCE]; /* Passage en 8 bits (gain 12 octets/vertex) */
 } Vertex3D;
 
 /* ============================================================================
@@ -113,7 +134,7 @@ static void SetVertexBoneDataToDefault(Vertex3D* vertex) {
 static void SetVertexBoneData(Vertex3D* vertex, int boneID, float weight) {
     for (unsigned int i = 0; i < MAX_BONE_INFLUENCE; i++) {
         if (vertex->m_BoneIDs[i] < 0) {
-            vertex->m_BoneIDs[i] = boneID;
+            vertex->m_BoneIDs[i] = (int8_t)boneID; /* Cast sécurisé car MAX_BONES=100 */
             vertex->m_Weights[i] = weight;
             break;
         }
@@ -170,7 +191,7 @@ static void ExtractBoneWeightForVertices(DUAL_Model* model, Vertex3D* vertices, 
 }
 
 /* ============================================================================
- * LOGIQUE D'ANIMATION
+ * LOGIQUE D'ANIMATION (Conservée intacte)
  * ========================================================================== */
 
 static int Bone_GetPositionIndex(Bone* bone, float animationTime) {
@@ -203,7 +224,6 @@ static float GetScaleFactor(float lastTimeStamp, float nextTimeStamp, float anim
 
 static DUAL_Mat4 Bone_InterpolatePosition(Bone* bone, float animationTime) {
     if (bone->m_NumPositions == 1) return DUAL_Mat4_Translate(bone->m_Positions[0].position);
-
     int p0Index = Bone_GetPositionIndex(bone, animationTime);
     int p1Index = p0Index + 1;
     float scaleFactor = GetScaleFactor(bone->m_Positions[p0Index].timeStamp, bone->m_Positions[p1Index].timeStamp, animationTime);
@@ -213,7 +233,6 @@ static DUAL_Mat4 Bone_InterpolatePosition(Bone* bone, float animationTime) {
 
 static DUAL_Mat4 Bone_InterpolateRotation(Bone* bone, float animationTime) {
     if (bone->m_NumRotations == 1) return DUAL_Quat_ToMat4(DUAL_Quat_Normalize(bone->m_Rotations[0].orientation));
-
     int p0Index = Bone_GetRotationIndex(bone, animationTime);
     int p1Index = p0Index + 1;
     float scaleFactor = GetScaleFactor(bone->m_Rotations[p0Index].timeStamp, bone->m_Rotations[p1Index].timeStamp, animationTime);
@@ -223,7 +242,6 @@ static DUAL_Mat4 Bone_InterpolateRotation(Bone* bone, float animationTime) {
 
 static DUAL_Mat4 Bone_InterpolateScaling(Bone* bone, float animationTime) {
     if (bone->m_NumScalings == 1) return DUAL_Mat4_Scale(bone->m_Scales[0].scale);
-
     int p0Index = Bone_GetScaleIndex(bone, animationTime);
     int p1Index = p0Index + 1;
     float scaleFactor = GetScaleFactor(bone->m_Scales[p0Index].timeStamp, bone->m_Scales[p1Index].timeStamp, animationTime);
@@ -299,7 +317,6 @@ DUAL_Result DUAL_Animation_Load(const char* path, DUAL_Model* model, Animation**
         bone->m_ID = boneID;
         bone->m_LocalTransform = DUAL_Mat4_Identity();
 
-        // POSITIONS
         bone->m_NumPositions = channel->mNumPositionKeys;
         bone->m_Positions = malloc(sizeof(KeyPosition) * bone->m_NumPositions);
         for(int j=0; j < bone->m_NumPositions; j++) {
@@ -307,7 +324,6 @@ DUAL_Result DUAL_Animation_Load(const char* path, DUAL_Model* model, Animation**
             bone->m_Positions[j].timeStamp = (float)channel->mPositionKeys[j].mTime;
         }
 
-        // ROTATIONS
         bone->m_NumRotations = channel->mNumRotationKeys;
         bone->m_Rotations = malloc(sizeof(KeyRotation) * bone->m_NumRotations);
         for(int j=0; j < bone->m_NumRotations; j++) {
@@ -315,7 +331,6 @@ DUAL_Result DUAL_Animation_Load(const char* path, DUAL_Model* model, Animation**
             bone->m_Rotations[j].timeStamp = (float)channel->mRotationKeys[j].mTime;
         }
 
-        // SCALES
         bone->m_NumScalings = channel->mNumScalingKeys;
         bone->m_Scales = malloc(sizeof(KeyScale) * bone->m_NumScalings);
         for(int j=0; j < bone->m_NumScalings; j++) {
@@ -325,7 +340,6 @@ DUAL_Result DUAL_Animation_Load(const char* path, DUAL_Model* model, Animation**
     }
 
     aiReleaseImport(scene);
-
     *out_animation = anim;
     return DUAL_OK;
 }
@@ -355,7 +369,6 @@ static void Animator_CalculateBoneTransform(Animator* animator, const AssimpNode
     for (int i = 0; i < model->m_BoneCounter; i++) {
         if (strcmp(model->m_BoneInfoMap[i].name, nodeName) == 0) {
             int boneID = model->m_BoneInfoMap[i].id;
-            // FIX 5: Vérifier que boneID ne dépasse pas MAX_BONES (100)
             if (boneID >= 0 && boneID < MAX_BONES) {
                 DUAL_Mat4 offset = model->m_BoneInfoMap[i].offset;
                 animator->m_FinalBoneMatrices[boneID] = DUAL_Mat4_Multiply(globalTransformation, offset);
@@ -379,17 +392,20 @@ void Animator_UpdateAnimation(Animator* animator, float dt) {
 }
 
 /* ============================================================================
- * SHADERS 3D
+ * SHADERS 3D GLES 3.1 AVEC UBOs
  * ========================================================================== */
 
 static const char* vertex_shader_unlit_src =
-    "#version 330 core\n"
+    "#version 310 es\n"
+    "precision highp float;\n"
     "layout (location = 0) in vec3 aPos;\n"
     "layout (location = 1) in vec3 aNormal;\n"
     "layout (location = 2) in vec2 aTexCoord;\n"
     "out vec2 TexCoord;\n"
-    "uniform mat4 uProjection;\n"
-    "uniform mat4 uView;\n"
+    "layout (std140, binding = 0) uniform CameraBlock {\n"
+    "   mat4 uProjection;\n"
+    "   mat4 uView;\n"
+    "};\n"
     "uniform mat4 uModel;\n"
     "void main() {\n"
     "   gl_Position = uProjection * uView * uModel * vec4(aPos, 1.0);\n"
@@ -397,7 +413,8 @@ static const char* vertex_shader_unlit_src =
     "}\n";
 
 static const char* fragment_shader_unlit_src =
-    "#version 330 core\n"
+    "#version 310 es\n"
+    "precision mediump float;\n"
     "in vec2 TexCoord;\n"
     "out vec4 FragColor;\n"
     "uniform sampler2D uTexture;\n"
@@ -406,15 +423,18 @@ static const char* fragment_shader_unlit_src =
     "}\n";
 
 static const char* vertex_shader_lit_src =
-    "#version 330 core\n"
+    "#version 310 es\n"
+    "precision highp float;\n"
     "layout (location = 0) in vec3 aPos;\n"
     "layout (location = 1) in vec3 aNormal;\n"
     "layout (location = 2) in vec2 aTexCoord;\n"
     "out vec3 FragPos;\n"
     "out vec3 Normal;\n"
     "out vec2 TexCoord;\n"
-    "uniform mat4 uProjection;\n"
-    "uniform mat4 uView;\n"
+    "layout (std140, binding = 0) uniform CameraBlock {\n"
+    "   mat4 uProjection;\n"
+    "   mat4 uView;\n"
+    "};\n"
     "uniform mat4 uModel;\n"
     "void main() {\n"
     "   FragPos = vec3(uModel * vec4(aPos, 1.0));\n"
@@ -424,18 +444,21 @@ static const char* vertex_shader_lit_src =
     "}\n";
 
 static const char* vertex_shader_skeleton_lit_src =
-    "#version 330 core\n"
+    "#version 310 es\n"
+    "precision highp float;\n"
     "layout(location = 0) in vec3 aPos;\n"
     "layout(location = 1) in vec3 aNormal;\n"
     "layout(location = 2) in vec2 aTexCoord;\n"
-    "layout(location = 3) in ivec4 aBoneIds;\n"
-    "layout(location = 4) in vec4 aWeights;\n"
-    "uniform mat4 uProjection;\n"
-    "uniform mat4 uView;\n"
+    "layout(location = 3) in vec4 aWeights;\n"
+    "layout(location = 4) in ivec4 aBoneIds;\n" /* Transmis depuis GL_BYTE */
+    "layout (std140, binding = 0) uniform CameraBlock {\n"
+    "   mat4 uProjection;\n"
+    "   mat4 uView;\n"
+    "};\n"
+    "layout (std140, binding = 1) uniform BonesBlock {\n"
+    "   mat4 finalBonesMatrices[100];\n"
+    "};\n"
     "uniform mat4 uModel;\n"
-    "const int MAX_BONES = 100;\n"
-    "const int MAX_BONE_INFLUENCE = 4;\n"
-    "uniform mat4 finalBonesMatrices[MAX_BONES];\n"
     "out vec3 FragPos;\n"
     "out vec3 Normal;\n"
     "out vec2 TexCoord;\n"
@@ -444,11 +467,11 @@ static const char* vertex_shader_skeleton_lit_src =
     "    vec4 totalPosition = vec4(0.0);\n"
     "    vec3 totalNormal = vec3(0.0);\n"
     "    int bonesApplied = 0;\n"
-    "    for(int i = 0 ; i < MAX_BONE_INFLUENCE ; i++)\n"
+    "    for(int i = 0 ; i < 4 ; i++)\n"
     "    {\n"
     "        if(aBoneIds[i] == -1)\n"
     "            continue;\n"
-    "        if(aBoneIds[i] >= MAX_BONES)\n"
+    "        if(aBoneIds[i] >= 100)\n"
     "        {\n"
     "            totalPosition = vec4(aPos, 1.0);\n"
     "            totalNormal = aNormal;\n"
@@ -472,7 +495,8 @@ static const char* vertex_shader_skeleton_lit_src =
     "}\n";
 
 static const char* fragment_shader_lit_src =
-    "#version 330 core\n"
+    "#version 310 es\n"
+    "precision mediump float;\n"
     "in vec3 FragPos;\n"
     "in vec3 Normal;\n"
     "in vec2 TexCoord;\n"
@@ -551,7 +575,7 @@ static void ApplyCullMode3D(DUAL_CullMode mode) {
 }
 
 /* ============================================================================
- * GESTION ET CHARGEMENT DES MODÈLES (MAINTENANT MESH PAR MESH)
+ * GESTION ET CHARGEMENT DES MODÈLES
  * ========================================================================== */
 
 DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials) {
@@ -577,24 +601,15 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
     DUAL_Vec3 bb_min = {  FLT_MAX,  FLT_MAX,  FLT_MAX };
     DUAL_Vec3 bb_max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
-    // FIX 1: Utilisation de calloc au lieu de malloc pour initialiser tous les pointeurs à NULL
     model->materials = calloc(scene->mNumMaterials, sizeof(DUAL_Material*));
     model->material_count = scene->mNumMaterials;
 
     for (unsigned int i = 0; i < scene->mNumMaterials; i++) {
         const struct aiMaterial* material = scene->mMaterials[i];
-
-        struct aiString matName;
-        if (aiGetMaterialString(material, AI_MATKEY_NAME, &matName) == aiReturn_SUCCESS) {
-            DUAL_Log(DUAL_LOG_INFO, "Matériau [%u] : %s", i, matName.data);
-        }
-
         struct aiString texPath;
         char texPathBuffer[512] = {0};
 
         if (aiGetMaterialTexture(material, aiTextureType_DIFFUSE, 0, &texPath, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {
-            DUAL_Log(DUAL_LOG_INFO, "  -> Texture diffuse trouvée : %s", texPath.data);
-
             const char* last_slash = strrchr(chemin_fichier, '/');
             const char* last_backslash = strrchr(chemin_fichier, '\\');
             const char* last_sep = (last_slash > last_backslash) ? last_slash : last_backslash;
@@ -610,23 +625,15 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
             strncat(texPathBuffer, texPath.data, sizeof(texPathBuffer) - strlen(texPathBuffer) - 1);
 
             DUAL_Texture* texture = NULL;
-            DUAL_Result result = DUAL_Texture_LoadFromFile(resources, texPathBuffer, DUAL_FILTER_NEAREST, &texture);
-            if (result != DUAL_OK) {
-                DUAL_Log(DUAL_LOG_WARNING, "Failed to load %s", texPathBuffer);
-                continue;
+            if (DUAL_Texture_LoadFromFile(resources, texPathBuffer, DUAL_FILTER_NEAREST, &texture) == DUAL_OK) {
+                DUAL_Material_Create(resources, texture, &model->materials[i]);
             }
-
-            DUAL_Material_Create(resources, texture, &model->materials[i]);
-        } else {
-            DUAL_Log(DUAL_LOG_INFO, "  -> Aucune texture diffuse");
         }
     }
 
-    // FIX 2: Dereferencer proprement le pointeur de sortie pour affecter la variable du caller
     if (out_material_count) *out_material_count = model->material_count;
     if (out_materials) *out_materials = model->materials;
 
-    // Chargement indépendant de chaque Mesh
     for (unsigned int m = 0; m < scene->mNumMeshes; m++) {
         const struct aiMesh* mesh = scene->mMeshes[m];
 
@@ -685,8 +692,9 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, normale)); glEnableVertexAttribArray(1);
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, tex_coords)); glEnableVertexAttribArray(2);
 
-        glVertexAttribIPointer(3, 4, GL_INT, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_BoneIDs)); glEnableVertexAttribArray(3);
-        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_Weights)); glEnableVertexAttribArray(4);
+        /* OPTIMISATION: weights en premier, BoneIDs passe en GL_BYTE */
+        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_Weights)); glEnableVertexAttribArray(3);
+        glVertexAttribIPointer(4, 4, GL_BYTE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_BoneIDs)); glEnableVertexAttribArray(4);
 
         glBindVertexArray(0);
 
@@ -695,7 +703,6 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
     }
 
     aiReleaseImport(scene);
-
     model->bounding_box_local.min = bb_min;
     model->bounding_box_local.max = bb_max;
 
@@ -706,7 +713,6 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
 void DUAL_Model_Destroy(DUAL_ResourceManager* resources, DUAL_Model* model) {
     (void)resources;
     if (!model) return;
-
     if (model->meshes) {
         for (uint32_t i = 0; i < model->mesh_count; i++) {
             glDeleteVertexArrays(1, &model->meshes[i].vao);
@@ -715,7 +721,6 @@ void DUAL_Model_Destroy(DUAL_ResourceManager* resources, DUAL_Model* model) {
         }
         free(model->meshes);
     }
-
     if (model->m_BoneInfoMap) {
         for (int i = 0; i < model->m_BoneCounter; i++) {
             free(model->m_BoneInfoMap[i].name);
@@ -754,20 +759,36 @@ DUAL_Result DUAL_Material_Create(DUAL_ResourceManager* resources, DUAL_Texture* 
 
 void DUAL_Material_Destroy(DUAL_ResourceManager* resources, DUAL_Material* material) {
     (void)resources;
-    if (material) {
-        free(material);
-    }
+    if (material) free(material);
 }
 
 void DUAL_Material_SetShininess(DUAL_Material* material, float brillance) {
-    if (material) {
-        material->brillance = brillance;
-    }
+    if (material) material->brillance = brillance;
 }
 
 /* ============================================================================
- * RENDERER 3D, CONFIGURATION ET CAMÉRA
+ * RENDERER 3D : OPTIMISATIONS DES UNIFORMS ET UBO
  * ========================================================================== */
+
+static void CacheShaderUniforms(DUAL_ShaderState* state, bool is_lit) {
+    state->uModel = glGetUniformLocation(state->program, "uModel");
+
+    if (is_lit) {
+        state->uMaterial_shininess = glGetUniformLocation(state->program, "uMaterial.shininess");
+        state->uAmbientLight = glGetUniformLocation(state->program, "uAmbientLight");
+        state->uViewPos = glGetUniformLocation(state->program, "uViewPos");
+
+        char uname[64];
+        for (int i = 0; i < DUAL_MAX_LIGHTS_3D; i++) {
+            sprintf(uname, "uLights[%d].type", i);      state->lights[i].type = glGetUniformLocation(state->program, uname);
+            sprintf(uname, "uLights[%d].position", i);  state->lights[i].position = glGetUniformLocation(state->program, uname);
+            sprintf(uname, "uLights[%d].direction", i); state->lights[i].direction = glGetUniformLocation(state->program, uname);
+            sprintf(uname, "uLights[%d].color", i);     state->lights[i].color = glGetUniformLocation(state->program, uname);
+            sprintf(uname, "uLights[%d].intensity", i); state->lights[i].intensity = glGetUniformLocation(state->program, uname);
+            sprintf(uname, "uLights[%d].range", i);     state->lights[i].range = glGetUniformLocation(state->program, uname);
+        }
+    }
+}
 
 DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer) {
     if (!app || !out_renderer) return DUAL_ERROR_INVALID_ARG;
@@ -775,25 +796,50 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     memset(renderer, 0, sizeof(struct DUAL_Renderer3D));
     renderer->app = app;
 
+    /* Compilation des shaders */
     GLuint vs_lit = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_lit_src);
     GLuint fs_lit = CompileShader3D(GL_FRAGMENT_SHADER, fragment_shader_lit_src);
-    renderer->shader_lit = glCreateProgram();
-    glAttachShader(renderer->shader_lit, vs_lit); glAttachShader(renderer->shader_lit, fs_lit); glLinkProgram(renderer->shader_lit);
-    glDeleteShader(vs_lit); glDeleteShader(fs_lit);
+    renderer->shader_lit.program = glCreateProgram();
+    glAttachShader(renderer->shader_lit.program, vs_lit); glAttachShader(renderer->shader_lit.program, fs_lit); glLinkProgram(renderer->shader_lit.program);
 
     GLuint vs_unlit = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_unlit_src);
     GLuint fs_unlit = CompileShader3D(GL_FRAGMENT_SHADER, fragment_shader_unlit_src);
-    renderer->shader_unlit = glCreateProgram();
-    glAttachShader(renderer->shader_unlit, vs_unlit); glAttachShader(renderer->shader_unlit, fs_unlit); glLinkProgram(renderer->shader_unlit);
-    glDeleteShader(vs_unlit); glDeleteShader(fs_unlit);
+    renderer->shader_unlit.program = glCreateProgram();
+    glAttachShader(renderer->shader_unlit.program, vs_unlit); glAttachShader(renderer->shader_unlit.program, fs_unlit); glLinkProgram(renderer->shader_unlit.program);
 
     GLuint vs_skel = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_skeleton_lit_src);
-    renderer->shader_skeleton = glCreateProgram();
-    glAttachShader(renderer->shader_skeleton, vs_skel); glAttachShader(renderer->shader_skeleton, fs_lit); glLinkProgram(renderer->shader_skeleton);
-    renderer->shader_skeleton_unlit = glCreateProgram();
-    glAttachShader(renderer->shader_skeleton_unlit, vs_skel); glAttachShader(renderer->shader_skeleton_unlit, fs_unlit); glLinkProgram(renderer->shader_skeleton_unlit);
-    glDeleteShader(vs_skel);
+    renderer->shader_skeleton.program = glCreateProgram();
+    glAttachShader(renderer->shader_skeleton.program, vs_skel); glAttachShader(renderer->shader_skeleton.program, fs_lit); glLinkProgram(renderer->shader_skeleton.program);
 
+    renderer->shader_skeleton_unlit.program = glCreateProgram();
+    glAttachShader(renderer->shader_skeleton_unlit.program, vs_skel); glAttachShader(renderer->shader_skeleton_unlit.program, fs_unlit); glLinkProgram(renderer->shader_skeleton_unlit.program);
+
+    glDeleteShader(vs_lit); glDeleteShader(fs_lit); glDeleteShader(vs_unlit); glDeleteShader(fs_unlit); glDeleteShader(vs_skel);
+
+    /* --- OPTIMISATION : Mise en cache --- */
+    CacheShaderUniforms(&renderer->shader_lit, true);
+    CacheShaderUniforms(&renderer->shader_unlit, false);
+    CacheShaderUniforms(&renderer->shader_skeleton, true);
+    CacheShaderUniforms(&renderer->shader_skeleton_unlit, false);
+
+    renderer->active_shaders[0] = &renderer->shader_lit;
+    renderer->active_shaders[1] = &renderer->shader_unlit;
+    renderer->active_shaders[2] = &renderer->shader_skeleton;
+    renderer->active_shaders[3] = &renderer->shader_skeleton_unlit;
+
+    /* --- OPTIMISATION : Création des UBOs --- */
+    glGenBuffers(1, &renderer->ubo_camera);
+    glBindBuffer(GL_UNIFORM_BUFFER, renderer->ubo_camera);
+    glBufferData(GL_UNIFORM_BUFFER, 2 * sizeof(DUAL_Mat4), NULL, GL_DYNAMIC_DRAW); /* Proj + View */
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, renderer->ubo_camera);
+
+    glGenBuffers(1, &renderer->ubo_bones);
+    glBindBuffer(GL_UNIFORM_BUFFER, renderer->ubo_bones);
+    glBufferData(GL_UNIFORM_BUFFER, MAX_BONES * sizeof(DUAL_Mat4), NULL, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, renderer->ubo_bones);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    /* Initialisation par défaut */
     renderer->render_mode = DUAL_RENDER_LIT;
     renderer->view = DUAL_Mat4_Identity();
     renderer->camera_position = (DUAL_Vec3){ 0.0f, 0.0f, 0.0f };
@@ -810,10 +856,12 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
 
 void DUAL_Renderer3D_Destroy(DUAL_Renderer3D* renderer) {
     if (!renderer) return;
-    if (renderer->shader_lit) glDeleteProgram(renderer->shader_lit);
-    if (renderer->shader_unlit) glDeleteProgram(renderer->shader_unlit);
-    if (renderer->shader_skeleton) glDeleteProgram(renderer->shader_skeleton);
-    if (renderer->shader_skeleton_unlit) glDeleteProgram(renderer->shader_skeleton_unlit);
+    glDeleteProgram(renderer->shader_lit.program);
+    glDeleteProgram(renderer->shader_unlit.program);
+    glDeleteProgram(renderer->shader_skeleton.program);
+    glDeleteProgram(renderer->shader_skeleton_unlit.program);
+    glDeleteBuffers(1, &renderer->ubo_camera);
+    glDeleteBuffers(1, &renderer->ubo_bones);
     free(renderer);
 }
 
@@ -852,10 +900,6 @@ void DUAL_Renderer3D_SetRenderMode(DUAL_Renderer3D* renderer, DUAL_RenderMode3D 
     renderer->render_mode = mode;
 }
 
-/* ============================================================================
- * ÉCLAIRAGE
- * ========================================================================== */
-
 void DUAL_Renderer3D_SetLight(DUAL_Renderer3D* renderer, int32_t index, DUAL_Light light) {
     if (!renderer || index < 0 || index >= DUAL_MAX_LIGHTS_3D) return;
     renderer->lights[index] = light;
@@ -876,12 +920,7 @@ void DUAL_Renderer3D_Begin(DUAL_Renderer3D* renderer) {
     glEnable(GL_DEPTH_TEST);
     glClear(GL_DEPTH_BUFFER_BIT);
     ApplyCullMode3D(renderer->cull_mode);
-
-    if (renderer->render_mode == DUAL_RENDER_WIREFRAME) {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    } else {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    }
+    glPolygonMode(GL_FRONT_AND_BACK, (renderer->render_mode == DUAL_RENDER_WIREFRAME) ? GL_LINE : GL_FILL);
 
     int32_t w = 0, h = 0;
     DUAL_Internal_GetScreenDimensions(renderer->app, &w, &h);
@@ -896,24 +935,28 @@ void DUAL_Renderer3D_Begin(DUAL_Renderer3D* renderer) {
         proj = DUAL_Mat4_Perspective(renderer->fov_radians, aspect, renderer->plan_proche, renderer->plan_lointain);
     }
 
-    GLuint shaders[] = { renderer->shader_lit, renderer->shader_unlit, renderer->shader_skeleton, renderer->shader_skeleton_unlit };
-    for (int s = 0; s < 4; s++) {
-        glUseProgram(shaders[s]);
-        glUniformMatrix4fv(glGetUniformLocation(shaders[s], "uProjection"), 1, GL_FALSE, proj.m);
-        glUniformMatrix4fv(glGetUniformLocation(shaders[s], "uView"), 1, GL_FALSE, renderer->view.m);
+    /* --- OPTIMISATION : Mise à jour unique via UBO --- */
+    DUAL_Mat4 camera_matrices[2] = { proj, renderer->view };
+    glBindBuffer(GL_UNIFORM_BUFFER, renderer->ubo_camera);
+    glBufferSubData(GL_UNIFORM_BUFFER, 0, 2 * sizeof(DUAL_Mat4), camera_matrices);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-        if (shaders[s] == renderer->shader_lit || shaders[s] == renderer->shader_skeleton) {
-            glUniform3f(glGetUniformLocation(shaders[s], "uAmbientLight"), renderer->ambient_light.x, renderer->ambient_light.y, renderer->ambient_light.z);
-            glUniform3f(glGetUniformLocation(shaders[s], "uViewPos"), renderer->camera_position.x, renderer->camera_position.y, renderer->camera_position.z);
-            char uname[64];
+    /* --- OPTIMISATION : Lumières via Uniforms cachés --- */
+    for (int s = 0; s < 4; s++) {
+        DUAL_ShaderState* state = renderer->active_shaders[s];
+        if (state == &renderer->shader_lit || state == &renderer->shader_skeleton) {
+            glUseProgram(state->program);
+            glUniform3f(state->uAmbientLight, renderer->ambient_light.x, renderer->ambient_light.y, renderer->ambient_light.z);
+            glUniform3f(state->uViewPos, renderer->camera_position.x, renderer->camera_position.y, renderer->camera_position.z);
+
             for (int i = 0; i < DUAL_MAX_LIGHTS_3D; i++) {
                 DUAL_Light* l = &renderer->lights[i];
-                sprintf(uname, "uLights[%d].type", i); glUniform1i(glGetUniformLocation(shaders[s], uname), l->type);
-                sprintf(uname, "uLights[%d].position", i); glUniform3f(glGetUniformLocation(shaders[s], uname), l->position.x, l->position.y, l->position.z);
-                sprintf(uname, "uLights[%d].direction", i); glUniform3f(glGetUniformLocation(shaders[s], uname), l->direction.x, l->direction.y, l->direction.z);
-                sprintf(uname, "uLights[%d].color", i); glUniform3f(glGetUniformLocation(shaders[s], uname), l->couleur.x, l->couleur.y, l->couleur.z);
-                sprintf(uname, "uLights[%d].intensity", i); glUniform1f(glGetUniformLocation(shaders[s], uname), l->intensite);
-                sprintf(uname, "uLights[%d].range", i); glUniform1f(glGetUniformLocation(shaders[s], uname), l->portee);
+                glUniform1i(state->lights[i].type, l->type);
+                glUniform3f(state->lights[i].position, l->position.x, l->position.y, l->position.z);
+                glUniform3f(state->lights[i].direction, l->direction.x, l->direction.y, l->direction.z);
+                glUniform3f(state->lights[i].color, l->couleur.x, l->couleur.y, l->couleur.z);
+                glUniform1f(state->lights[i].intensity, l->intensite);
+                glUniform1f(state->lights[i].range, l->portee);
             }
         }
     }
@@ -929,24 +972,18 @@ void DUAL_Renderer3D_End(DUAL_Renderer3D* renderer) {
  * ========================================================================== */
 
 void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material** materials, DUAL_Transform3D transform, Animator* animator) {
-    if (!renderer || !model) {
-        DUAL_Log(DUAL_LOG_ERROR, "DUAL_DrawAnimatedModel: renderer or model is NULL");
-        return;
-    }
+    if (!renderer || !model) return;
 
-    // FIX 3: Si 'materials' passe NULL, on bascule automatiquement sur les matériaux internes du modèle
-    if (!materials) {
-        materials = (const DUAL_Material**)model->materials;
-    }
+    if (!materials) materials = (const DUAL_Material**)model->materials;
 
-    GLuint active_shader;
+    DUAL_ShaderState* active_state;
     if (animator) {
-        active_shader = (renderer->render_mode == DUAL_RENDER_UNLIT) ? renderer->shader_skeleton_unlit : renderer->shader_skeleton;
+        active_state = (renderer->render_mode == DUAL_RENDER_UNLIT) ? &renderer->shader_skeleton_unlit : &renderer->shader_skeleton;
     } else {
-        active_shader = (renderer->render_mode == DUAL_RENDER_UNLIT) ? renderer->shader_unlit : renderer->shader_lit;
+        active_state = (renderer->render_mode == DUAL_RENDER_UNLIT) ? &renderer->shader_unlit : &renderer->shader_lit;
     }
 
-    glUseProgram(active_shader);
+    glUseProgram(active_state->program);
 
     DUAL_Mat4 scale   = DUAL_Mat4_Scale(transform.echelle);
     DUAL_Mat4 rot_x   = DUAL_Mat4_Rotate((DUAL_Vec3){ 1.0f, 0.0f, 0.0f }, transform.rotation_euler_radians.x);
@@ -955,28 +992,28 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
     DUAL_Mat4 trans   = DUAL_Mat4_Translate(transform.position);
     DUAL_Mat4 modele  = DUAL_Mat4_Multiply(trans, DUAL_Mat4_Multiply(DUAL_Mat4_Multiply(rot_z, DUAL_Mat4_Multiply(rot_y, rot_x)), scale));
 
-    glUniformMatrix4fv(glGetUniformLocation(active_shader, "uModel"), 1, GL_FALSE, modele.m);
+    /* --- OPTIMISATION : Plus de glGetUniformLocation ! --- */
+    glUniformMatrix4fv(active_state->uModel, 1, GL_FALSE, modele.m);
 
-    if (animator && (active_shader == renderer->shader_skeleton || active_shader == renderer->shader_skeleton_unlit)) {
-        for (int i = 0; i < MAX_BONES; i++) {
-            char matName[64];
-            sprintf(matName, "finalBonesMatrices[%d]", i);
-            glUniformMatrix4fv(glGetUniformLocation(active_shader, matName), 1, GL_FALSE, animator->m_FinalBoneMatrices[i].m);
-        }
+    /* --- OPTIMISATION : Matrice des Os via UBO (1 appel plutôt que 100) --- */
+    if (animator && (active_state == &renderer->shader_skeleton || active_state == &renderer->shader_skeleton_unlit)) {
+        glBindBuffer(GL_UNIFORM_BUFFER, renderer->ubo_bones);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, MAX_BONES * sizeof(DUAL_Mat4), animator->m_FinalBoneMatrices);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
     }
 
-    // Rendu individuel de chaque Mesh
     for (uint32_t i = 0; i < model->mesh_count; i++) {
         const DUAL_Material* material = NULL;
         uint32_t mat_idx = model->meshes[i].material_index;
 
-        // FIX 4: Vérification des bornes du tableau de matériaux
         if (materials && mat_idx < model->material_count) {
             material = materials[mat_idx];
         }
 
         if (material && material->texture_diffuse) {
-            glUniform1f(glGetUniformLocation(active_shader, "uMaterial.shininess"), material->brillance);
+            if (active_state == &renderer->shader_lit || active_state == &renderer->shader_skeleton) {
+                glUniform1f(active_state->uMaterial_shininess, material->brillance);
+            }
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, DUAL_Internal_GetTextureID(material->texture_diffuse));
         } else {
@@ -986,7 +1023,6 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
         glBindVertexArray(model->meshes[i].vao);
         glDrawElements(GL_TRIANGLES, (GLsizei)model->meshes[i].index_count, GL_UNSIGNED_INT, 0);
     }
-
     glBindVertexArray(0);
 }
 

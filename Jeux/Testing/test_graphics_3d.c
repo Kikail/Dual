@@ -39,6 +39,7 @@ int main() {
     DUAL_ResourceManager* resourceManager = NULL;
     DUAL_ResourceManager_Create(app, &resourceManager);
 
+    // On initialise les ressources
     DUAL_Model* ambulanceModel = NULL;
     DUAL_Material** materials = NULL;
     unsigned int materialCount = 0;
@@ -85,6 +86,8 @@ int main() {
     };
     DUAL_Renderer3D_SetLight(renderer3D, 0, light);
     DUAL_Renderer3D_SetLight(renderer3D, 1, sun);
+
+    DUAL_Renderer3D_SetCullMode(renderer3D, DUAL_CULL_BACK);
 
     // On creer les input
     DUAL_InputManager* inputManager = NULL;

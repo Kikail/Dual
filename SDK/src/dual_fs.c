@@ -381,6 +381,8 @@ DUAL_Result DUAL_Cartridge_ReadFile(DUAL_Cartridge* cartridge, const char* chemi
     FILE* f = fopen(chemin, "rb");
     if (!f) return DUAL_ERROR_NOT_FOUND;
 
+    memset(out_buffer, 0, (size_t)taille_buffer);
+
     size_t read_bytes = fread(out_buffer, 1, (size_t)taille_buffer, f);
     if (out_octets_lus) {
         *out_octets_lus = (uint64_t)read_bytes;

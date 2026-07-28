@@ -44,6 +44,13 @@ typedef struct DUAL_ResourceManager DUAL_ResourceManager;
  */
 typedef struct DUAL_ResourceHandle DUAL_ResourceHandle;
 
+/**
+ * @brief Groupe de resources permettant de tracker le chargement de toutes les
+ *        ressources dans ce groupe ce qui nous permettera de faire des ecrans de
+ *        chargement et de tout charger proprement
+ */
+typedef struct DUAL_ResourceGroup DUAL_ResourceGroup;
+
 /* ============================================================================
  *  Enumérations
  * ========================================================================== */
@@ -205,6 +212,17 @@ void DUAL_ResourceManager_PurgeAll(DUAL_ResourceManager* manager);
  * @param manager Gestionnaire de ressources.
  */
 void DUAL_ResourceManager_Log(DUAL_ResourceManager* manager);
+
+/* ============================================================================
+ *  Resource Group
+ * ========================================================================== */
+
+typedef DUAL_Result (*DUAL_LoadCallback)(DUAL_ResourceManager* manager, const char* path, void** out_resource);
+DUAL_Result DUAL_ResourceGroup_Create(DUAL_ResourceGroup** out_group);
+void DUAL_ResourceGroup_Destroy(DUAL_ResourceGroup* group);
+DUAL_Result DUAL_ResourceGroup_Add(DUAL_ResourceGroup* group,const char* path,DUAL_MemoryType type,DUAL_ResourceCategory categorie,DUAL_LoadCallback load_fn,void** out_resource_ptr);
+DUAL_Result DUAL_ResourceGroup_Step(DUAL_ResourceManager* manager, DUAL_ResourceGroup* group);
+float DUAL_ResourceGroup_GetProgress(const DUAL_ResourceGroup* group);
 
 #ifdef __cplusplus
 }

@@ -135,3 +135,11 @@ target_include_directories(test_graphics_3d PRIVATE
 )
 target_link_libraries(test_graphics_3d PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
 
+# Test File Saver
+add_executable(test_fs Jeux/Testing/test_fs.c ${SDK_SOURCES})
+target_include_directories(test_fs PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
+)
+target_link_libraries(test_fs PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
+

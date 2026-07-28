@@ -27,6 +27,8 @@ typedef struct Personnage {
 
 #define ALLOC(type) (type*)malloc(sizeof(type))
 
+
+
 int main() {
     DUAL_Log(DUAL_LOG_INFO, "Test Resources started !");
 
