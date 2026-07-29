@@ -36,8 +36,6 @@ static inline void dual_log_result_internal(int result, int line, const char* fi
     (void)result; (void)line; (void)file; (void)func; // Évite les warnings en mode Release
 #endif
 }
-
-// La macro finale que tu appelles dans ton code
 #define DEBUG_DUAL_RESULT(result) dual_log_result_internal(result, __LINE__, __FILE__, __FUNCTION__)
 
 

@@ -27,8 +27,6 @@ static DUAL_Texture* bottom = NULL;
 static DUAL_Texture* bottom_buttom = NULL;
 static DUAL_Texture* gameoverTexture = NULL;
 
-static DUAL_SoundInstance* wingInstance = NULL;
-static DUAL_SoundInstance* hitInstance = NULL;
 static DUAL_Sound* soundHit = NULL;
 static DUAL_Sound* soundWing = NULL;
 
@@ -86,8 +84,6 @@ void my_init(INCLUDES_FONCTIONS) {
     gameoverTexture = NULL;
     soundHit = NULL;
     soundWing = NULL;
-    wingInstance = NULL;
-    hitInstance = NULL;
 
     printf("Le jeu démarre !\n");
     const char* racine = DUAL_FS_GetCartridgeRoot();
@@ -172,11 +168,7 @@ void deplacements_oiseau(float dt, INCLUDES_FONCTIONS) {
 
     if (touch.phase == DUAL_TOUCH_STARTED) {
         bird_velocity = jump_strength;
-        if (wingInstance) {
-            DUAL_SoundInstance_Play(audioManager, wingInstance);
-        } else if (soundWing) {
-            wingInstance = DUAL_Sound_Play(audioManager, soundWing, 1.0, 1.0);
-        }
+        DUAL_Sound_Play(audioManager, soundWing, 1.0, 1.0);
     }
 
     bird_y += bird_velocity * dt;
@@ -197,11 +189,7 @@ void deplacements_oiseau(float dt, INCLUDES_FONCTIONS) {
         // CORRECTION : On ne joue le son QUE au moment du passage à gameOver
         if (!gameOver) {
             gameOver = true;
-            if (hitInstance) {
-                DUAL_SoundInstance_Play(audioManager, hitInstance);
-            } else if (soundHit) {
-                hitInstance = DUAL_Sound_Play(audioManager, soundHit, 1.0, 1.0);
-            }
+            DUAL_Sound_Play(audioManager, soundHit, 1.0, 1.0);
         }
     }
 
@@ -261,11 +249,7 @@ void handleCollisions(float dt, INCLUDES_FONCTIONS) {
 
         if (DUAL_CollideRectRect(collider_oiseau, tuyau_haut) || DUAL_CollideRectRect(collider_oiseau, tuyau_bas)) {
             gameOver = true;
-            if (hitInstance) {
-                DUAL_SoundInstance_Play(audioManager, hitInstance);
-            } else if (soundHit) {
-                hitInstance = DUAL_Sound_Play(audioManager, soundHit, 1.0, 1.0);
-            }
+            DUAL_Sound_Play(audioManager, soundHit, 1.0, 1.0);
             break;
         }
     }
@@ -302,11 +286,7 @@ void my_update(float dt, INCLUDES_FONCTIONS) {
             gameStarted = true;
             // On applique le premier saut directement pour lancer l'oiseau
             bird_velocity = jump_strength;
-            if (wingInstance) {
-                DUAL_SoundInstance_Play(audioManager, wingInstance);
-            } else if (soundWing) {
-                wingInstance = DUAL_Sound_Play(audioManager, soundWing, 1.0, 1.0);
-            }
+            DUAL_Sound_Play(audioManager, soundWing, 1.0, 1.0);
         }
     }
 }
@@ -508,8 +488,6 @@ void my_shutdown(INCLUDES_FONCTIONS) {
     font = NULL;
     soundHit = NULL;
     soundWing = NULL;
-    wingInstance = NULL;
-    hitInstance = NULL;
 }
 
 void get_game_api(GameAPI* api) {

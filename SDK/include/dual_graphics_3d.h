@@ -28,7 +28,6 @@ typedef struct DUAL_Mesh DUAL_Mesh;
 typedef struct DUAL_Model DUAL_Model;
 typedef struct DUAL_Material DUAL_Material;
 typedef struct DUAL_Renderer3D DUAL_Renderer3D;
-
 typedef struct KeyPosition KeyPosition;
 typedef struct KeyRotation KeyRotation;
 typedef struct KeyScale KeyScale;

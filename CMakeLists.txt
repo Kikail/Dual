@@ -3,6 +3,7 @@ project(Dual C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ========================================================================
 # 1. CONFIGURATION DU MOTEUR (L'exécutable principal)
@@ -70,29 +71,32 @@ target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} OpenGL::G
 # 2. CONFIGURATION DU JEU (La cartouche .so)
 # ========================================================================
 
-# On crée une bibliothèque dynamique (.so) séparée pour ton jeu
-add_library(game SHARED Jeux/Jeu1/game.c)
 
-# Le jeu a aussi besoin de lire les headers du SDK pour compiler
+add_library(game SHARED Jeux/Jeu1/game.c)
 target_include_directories(game PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
 )
-
-# Force le nom du fichier généré à "game.so" au lieu de "libgame.so"
 set_target_properties(game PROPERTIES PREFIX "")
-
-
-# ========================================================================
-# 3. COPIE AUTOMATIQUE VERS LA CLÉ USB
-# ========================================================================
 set(CLE_USB "/media/killian/692B-8D17")
-
 add_custom_command(TARGET game POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
         $<TARGET_FILE:game>
         ${CLE_USB}/game.so
         COMMENT "Copie de game.so vers la racine de la cle USB..."
 )
+
+
+# ========================================================================
+# 3. GENERATION DU SDK DYNAMIQUE (libdual.so)
+# ========================================================================
+
+add_library(dual SHARED ${SDK_SOURCES})
+target_include_directories(dual PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
+)
+target_link_libraries(dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
+
 
 # ========================================================================
 # TESTS
@@ -153,4 +157,3 @@ target_include_directories(test_audio PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
 target_link_libraries(test_audio PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
-
