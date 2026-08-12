@@ -23,12 +23,33 @@ bool EstCartoucheInseree(const char* chemin) {
     return (access(chemin, F_OK) == 0);
 }
 
+/*
+ *
+ * Fonctionnalites a ajouter:
+ *  - Shaders perso
+ *  - Attenuation du son avec la distance 2D ou 3D
+ *  - Systeme de particules
+ *  - Simples collisions 2D/3D ainsi que des Raycast
+ *  - Des tilemaps
+ *  - Transparence sur les shaders
+ *  - Frustum culling ( ne pas afficher les modeles hors du champs de vision )
+ *  - Systeme de LOD
+ *  - Billboards ( Sprite dans un environnement 3D, regarde toujours la camera )
+ *  - Overlay de debug qui affiche les stats CPU et GPU
+ *
+ *  - Systeme de build de game, construit un fichier contenant toutes les informations
+ *  d'un jeu comme son executable et ses ressources. Tout comme un fichier .nds
+ *  Dual lira alors ce fichier la et pourra interpreter ce fichier comme un jeu.
+ *
+*/
+
 int main(int argc, char** argv) {
     (void)argc; (void)argv;
 
     GameAPI game = game_api_create();
 
-    const char* chemin_cartouche = "/media/killian/692B-8D17";
+    //const char* chemin_cartouche = "/media/killian/692B-8D17";
+    const char* chemin_cartouche = "/home/killian/Projects/C/DUAL_Games/Game01";
     bool carteLue = false;
 
     DUAL_App* app = NULL;
@@ -36,7 +57,7 @@ int main(int argc, char** argv) {
         .titre_fenetre = "Test libdual - Double Ecran",
         .largeur_ecran = 400 * 2,
         .hauteur_ecran = 240 * 2,
-        .plein_ecran = false,
+        .plein_ecran = true,
         .vsync_actif = true,
         .fps_cible = 60
     };
@@ -68,7 +89,7 @@ int main(int argc, char** argv) {
     // 1. Initialisation du moteur audio
     DUAL_AudioManager* audio = NULL;
     if (DUAL_AudioManager_Create(app, &audio) != 0) {
-        printf("Erreur: Impossible d'initialiser l'audio.\n");
+        DUAL_Log(DUAL_LOG_ERROR, "Impossible d'initialiser l'audio.");
         return -1;
     }
 
@@ -127,6 +148,8 @@ int main(int argc, char** argv) {
 
                 game.initialized = false;
                 carteLue = false;
+                DUAL_SetScreenClearColor(app, DUAL_SCREEN_TOP, (DUAL_Color){0.1f, 0.6f, 0.2f, 1.0f});
+                DUAL_SetScreenClearColor(app, DUAL_SCREEN_BOTTOM, (DUAL_Color){0.1f, 0.3f, 0.6f, 1.0f});
 
                 DUAL_AudioManager_SetChannelVolume(audio, DUAL_CHANNEL_MASTER, 0.0f);
                 DUAL_ResourceManager_PurgeAll(resources);

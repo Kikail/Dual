@@ -47,7 +47,9 @@ typedef struct {
 struct DUAL_Renderer2D {
     DUAL_App* app;
     GLuint vao, vbo;
-    GLuint shader_program;
+    
+    GLuint current_shader_program;
+    GLuint default_shader_program;
 
     // Caméra
     DUAL_Vec2 camera_pos;
@@ -113,7 +115,7 @@ const char* fragment_shader_src =
     "   }\n"
     "}\n";
 
-static GLuint CompileShader(GLenum type, const char* source) {
+static GLuint CompileShader(GLenum type, const char* source, DUAL_Result* result) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, NULL);
     glCompileShader(shader);
@@ -123,7 +125,9 @@ static GLuint CompileShader(GLenum type, const char* source) {
         char infoLog[512];
         glGetShaderInfoLog(shader, 512, NULL, infoLog);
         printf("[ERREUR SHADER] %s\n", infoLog);
+        *result = DUAL_ERROR_INIT_FAILED;
     }
+    *result = DUAL_OK;
     return shader;
 }
 
@@ -220,14 +224,20 @@ DUAL_Result DUAL_Renderer2D_Create(DUAL_App* app, DUAL_Renderer2D** out_renderer
     if (!renderer) return DUAL_ERROR_OUT_OF_MEMORY;
 
     renderer->app = app;
-    GLuint vs = CompileShader(GL_VERTEX_SHADER, vertex_shader_src);
-    GLuint fs = CompileShader(GL_FRAGMENT_SHADER, fragment_shader_src);
-    renderer->shader_program = glCreateProgram();
-    glAttachShader(renderer->shader_program, vs);
-    glAttachShader(renderer->shader_program, fs);
-    glLinkProgram(renderer->shader_program);
+
+    DUAL_Result result = DUAL_OK;
+
+    GLuint vs = CompileShader(GL_VERTEX_SHADER, vertex_shader_src, &result);
+    GLuint fs = CompileShader(GL_FRAGMENT_SHADER, fragment_shader_src, &result);
+    renderer->default_shader_program = glCreateProgram();
+    glAttachShader(renderer->default_shader_program, vs);
+    glAttachShader(renderer->default_shader_program, fs);
+    glLinkProgram(renderer->default_shader_program);
     glDeleteShader(vs);
     glDeleteShader(fs);
+
+    // On assigne le shader par defaut dans le shader principal
+    renderer->current_shader_program = renderer->default_shader_program;
 
     renderer->max_vertices = 2000 * 4;
     renderer->vertex_count = 0;
@@ -260,7 +270,7 @@ void DUAL_Renderer2D_Destroy(DUAL_Renderer2D* renderer) {
     if (renderer) {
         glDeleteVertexArrays(1, &renderer->vao);
         glDeleteBuffers(1, &renderer->vbo);
-        glDeleteProgram(renderer->shader_program);
+        glDeleteProgram(renderer->default_shader_program);
         free(renderer->vertex_buffer);
         free(renderer);
     }
@@ -269,7 +279,7 @@ void DUAL_Renderer2D_Destroy(DUAL_Renderer2D* renderer) {
 static void FlushBatch(DUAL_Renderer2D* renderer) {
     if (renderer->vertex_count == 0) return;
 
-    glUseProgram(renderer->shader_program);
+    glUseProgram(renderer->current_shader_program);
 
     int32_t w, h;
     DUAL_Internal_GetScreenDimensions(renderer->app, &w, &h);
@@ -278,11 +288,11 @@ static void FlushBatch(DUAL_Renderer2D* renderer) {
     DUAL_Mat4 view = DUAL_Mat4_Identity();
     view = DUAL_Mat4_Multiply(view, DUAL_Mat4_Translate((DUAL_Vec3){-renderer->camera_pos.x, -renderer->camera_pos.y, 0.0f}));
 
-    glUniformMatrix4fv(glGetUniformLocation(renderer->shader_program, "uProjection"), 1, GL_FALSE, projection.m);
-    glUniformMatrix4fv(glGetUniformLocation(renderer->shader_program, "uView"), 1, GL_FALSE, view.m);
+    glUniformMatrix4fv(glGetUniformLocation(renderer->current_shader_program, "uProjection"), 1, GL_FALSE, projection.m);
+    glUniformMatrix4fv(glGetUniformLocation(renderer->current_shader_program, "uView"), 1, GL_FALSE, view.m);
 
     // Configuration de l'uniform booléen uUseTexture
-    GLint use_tex_loc = glGetUniformLocation(renderer->shader_program, "uUseTexture");
+    GLint use_tex_loc = glGetUniformLocation(renderer->current_shader_program, "uUseTexture");
     if (renderer->texture_courante) {
         glUniform1i(use_tex_loc, 1);
         glBindTexture(GL_TEXTURE_2D, renderer->texture_courante->id_opengl);
@@ -618,4 +628,39 @@ void DUAL_DrawCircleOutline(DUAL_Renderer2D* renderer, DUAL_Circle cercle, DUAL_
     renderer->vertex_buffer[idx++] = (Vertex2D){ p3, uv3, couleur };
 
     renderer->vertex_count = idx;
+}
+
+DUAL_Result DUAL_Renderer2D_LoadShader(DUAL_Renderer2D* renderer, char* vertex_shader, char* fragment_shader, GLuint* out_shader) {
+    if (!renderer) return DUAL_ERROR_INVALID_ARG;
+
+    DUAL_Result result;
+    GLuint vs = CompileShader(GL_VERTEX_SHADER, vertex_shader, &result);
+    GLuint fs = CompileShader(GL_FRAGMENT_SHADER, fragment_shader, &result);
+
+    if (result != DUAL_OK) {
+        return result;
+    }
+
+    GLuint shader = glCreateProgram();
+    glAttachShader(shader, vs);
+    glAttachShader(shader, fs);
+    glLinkProgram(shader);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    *out_shader = shader;
+
+    return DUAL_OK;
+}
+
+void DUAL_Renderer2D_ResetShader(DUAL_Renderer2D* renderer) {
+    if (!renderer) return;
+
+    renderer->current_shader_program = renderer->default_shader_program;
+}
+
+void DUAL_Renderer2D_UseShader(DUAL_Renderer2D* renderer, GLuint shader) {
+    if (!renderer) return;
+
+    renderer->current_shader_program = shader;
 }

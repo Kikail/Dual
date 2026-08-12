@@ -171,6 +171,7 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
 void DUAL_Renderer3D_Destroy(DUAL_Renderer3D* renderer);
 
 void DUAL_Renderer3D_SetCameraLookAt(DUAL_Renderer3D* renderer, DUAL_Vec3 position, DUAL_Vec3 cible, DUAL_Vec3 haut);
+void DUAL_Renderer3D_SetCameraPosition(DUAL_Renderer3D* renderer, DUAL_Vec3 position);
 void DUAL_Renderer3D_SetProjection(DUAL_Renderer3D* renderer, float fov_radians, float plan_proche, float plan_lointain);
 void DUAL_Renderer3D_SetProjectionMode(DUAL_Renderer3D* renderer, DUAL_ProjectionMode3D mode);
 void DUAL_Renderer3D_SetOrthographic(DUAL_Renderer3D* renderer, float demi_hauteur, float plan_proche, float plan_lointain);
@@ -194,6 +195,15 @@ void DUAL_Renderer3D_SetAmbientLight(DUAL_Renderer3D* renderer, DUAL_Vec3 couleu
 
 void DUAL_DrawModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material** materials, DUAL_Transform3D transform);
 void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material** materials, DUAL_Transform3D transform, Animator* animator);
+
+/* ============================================================================
+ *  Shaders
+ * ========================================================================== */
+
+DUAL_Result DUAL_Renderer3D_LoadShader(DUAL_Renderer3D* renderer, char* vertex_shader, char* fragment_shader, GLuint* out_shader);
+void DUAL_Renderer3D_ResetShader(DUAL_Renderer3D* renderer);
+void DUAL_Renderer3D_UseShader(DUAL_Renderer3D* renderer, GLuint shader);
+
 
 #ifdef __cplusplus
 }

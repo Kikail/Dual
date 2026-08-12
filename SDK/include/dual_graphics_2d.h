@@ -296,6 +296,14 @@ void DUAL_DrawText(DUAL_Renderer2D* renderer, const DUAL_Font* font,
 void DUAL_MeasureText(const DUAL_Font* font, const char* texte,
                        float* out_largeur, float* out_hauteur);
 
+/* ============================================================================
+ *  Shaders
+ * ========================================================================== */
+
+DUAL_Result DUAL_Renderer2D_LoadShader(DUAL_Renderer2D* renderer, char* vertex_shader, char* fragment_shader, GLuint* out_shader);
+void DUAL_Renderer2D_ResetShader(DUAL_Renderer2D* renderer);
+void DUAL_Renderer2D_UseShader(DUAL_Renderer2D* renderer, GLuint shader);
+
 #ifdef __cplusplus
 }
 #endif

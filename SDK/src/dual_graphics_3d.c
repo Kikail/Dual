@@ -78,12 +78,15 @@ struct DUAL_Renderer3D {
     DUAL_App* app;
 
     /* Shaders & Caches */
+    DUAL_ShaderState current_shader;
     DUAL_ShaderState shader_lit;
     DUAL_ShaderState shader_unlit;
     DUAL_ShaderState shader_skeleton;
     DUAL_ShaderState shader_skeleton_unlit;
+    DUAL_ShaderState shader_custom;
 
-    DUAL_ShaderState* active_shaders[4];
+    // On reserve un emplacement supplementaire pour les shaders perso
+    DUAL_ShaderState* active_shaders[5];
 
     /* UBOs pour GLES 3.1 */
     GLuint ubo_camera; /* Binding 0: uProjection, uView */
@@ -524,7 +527,6 @@ static const char* fragment_shader_lit_src =
     "   vec3 norm = normalize(Normal);\n"
     "   vec3 viewDir = normalize(uViewPos - FragPos);\n"
     "   vec3 diffuseAccum = vec3(0.0);\n"
-    "   vec3 specularAccum = vec3(0.0);\n"
     "   for (int i = 0; i < MAX_LIGHTS; ++i) {\n"
     "       if (uLights[i].intensity <= 0.0) continue;\n"
     "       vec3 lightDir;\n"
@@ -543,15 +545,12 @@ static const char* fragment_shader_lit_src =
     "       }\n"
     "       float diff = max(dot(norm, lightDir), 0.0);\n"
     "       diffuseAccum += uLights[i].color * uLights[i].intensity * diff * texColor.rgb * attenuation;\n"
-    "       vec3 reflectDir = reflect(-lightDir, norm);\n"
-    "       float spec = pow(max(dot(viewDir, reflectDir), 0.0), uMaterial.shininess);\n"
-    "       specularAccum += uLights[i].color * uLights[i].intensity * spec * attenuation;\n"
     "   }\n"
-    "   vec3 result = ambient + diffuseAccum + specularAccum;\n"
+    "   vec3 result = ambient + diffuseAccum;\n"
     "   FragColor = vec4(result, texColor.a);\n"
     "}\n";
 
-static GLuint CompileShader3D(GLenum type, const char* source) {
+static GLuint CompileShader3D(GLenum type, const char* source, DUAL_Result* out_result) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, NULL);
     glCompileShader(shader);
@@ -797,19 +796,20 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     renderer->app = app;
 
     /* Compilation des shaders */
-    GLuint vs_lit = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_lit_src);
-    GLuint fs_lit = CompileShader3D(GL_FRAGMENT_SHADER, fragment_shader_lit_src);
+    GLuint vs_lit = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_lit_src, NULL);
+    GLuint fs_lit = CompileShader3D(GL_FRAGMENT_SHADER, fragment_shader_lit_src, NULL);
     renderer->shader_lit.program = glCreateProgram();
     glAttachShader(renderer->shader_lit.program, vs_lit); glAttachShader(renderer->shader_lit.program, fs_lit); glLinkProgram(renderer->shader_lit.program);
 
-    GLuint vs_unlit = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_unlit_src);
-    GLuint fs_unlit = CompileShader3D(GL_FRAGMENT_SHADER, fragment_shader_unlit_src);
+    GLuint vs_unlit = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_unlit_src, NULL);
+    GLuint fs_unlit = CompileShader3D(GL_FRAGMENT_SHADER, fragment_shader_unlit_src, NULL);
     renderer->shader_unlit.program = glCreateProgram();
     glAttachShader(renderer->shader_unlit.program, vs_unlit); glAttachShader(renderer->shader_unlit.program, fs_unlit); glLinkProgram(renderer->shader_unlit.program);
 
-    GLuint vs_skel = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_skeleton_lit_src);
+    GLuint vs_skel = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_skeleton_lit_src, NULL);
     renderer->shader_skeleton.program = glCreateProgram();
     glAttachShader(renderer->shader_skeleton.program, vs_skel); glAttachShader(renderer->shader_skeleton.program, fs_lit); glLinkProgram(renderer->shader_skeleton.program);
+    renderer->shader_custom.program = renderer->shader_skeleton.program;
 
     renderer->shader_skeleton_unlit.program = glCreateProgram();
     glAttachShader(renderer->shader_skeleton_unlit.program, vs_skel); glAttachShader(renderer->shader_skeleton_unlit.program, fs_unlit); glLinkProgram(renderer->shader_skeleton_unlit.program);
@@ -821,11 +821,15 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     CacheShaderUniforms(&renderer->shader_unlit, false);
     CacheShaderUniforms(&renderer->shader_skeleton, true);
     CacheShaderUniforms(&renderer->shader_skeleton_unlit, false);
+    CacheShaderUniforms(&renderer->shader_custom, true);
 
     renderer->active_shaders[0] = &renderer->shader_lit;
     renderer->active_shaders[1] = &renderer->shader_unlit;
     renderer->active_shaders[2] = &renderer->shader_skeleton;
     renderer->active_shaders[3] = &renderer->shader_skeleton_unlit;
+    renderer->active_shaders[4] = &renderer->shader_custom;
+
+    renderer->current_shader = renderer->shader_skeleton;
 
     /* --- OPTIMISATION : Création des UBOs --- */
     glGenBuffers(1, &renderer->ubo_camera);
@@ -869,6 +873,10 @@ void DUAL_Renderer3D_SetCameraLookAt(DUAL_Renderer3D* renderer, DUAL_Vec3 positi
     if (!renderer) return;
     renderer->camera_position = position;
     renderer->view = DUAL_Mat4_LookAt(position, cible, haut);
+}
+void DUAL_Renderer3D_SetCameraPosition(DUAL_Renderer3D* renderer, DUAL_Vec3 position) {
+    if (!renderer) return;
+    renderer->camera_position = position;
 }
 
 void DUAL_Renderer3D_SetProjection(DUAL_Renderer3D* renderer, float fov_radians, float plan_proche, float plan_lointain) {
@@ -942,9 +950,10 @@ void DUAL_Renderer3D_Begin(DUAL_Renderer3D* renderer) {
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
     /* --- OPTIMISATION : Lumières via Uniforms cachés --- */
-    for (int s = 0; s < 4; s++) {
+    for (int s = 0; s < 5; s++) {
         DUAL_ShaderState* state = renderer->active_shaders[s];
-        if (state == &renderer->shader_lit || state == &renderer->shader_skeleton) {
+
+        if (state == &renderer->shader_lit || state == &renderer->shader_skeleton || state == &renderer->shader_custom) {
             glUseProgram(state->program);
             glUniform3f(state->uAmbientLight, renderer->ambient_light.x, renderer->ambient_light.y, renderer->ambient_light.z);
             glUniform3f(state->uViewPos, renderer->camera_position.x, renderer->camera_position.y, renderer->camera_position.z);
@@ -977,11 +986,14 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
     if (!materials) materials = (const DUAL_Material**)model->materials;
 
     DUAL_ShaderState* active_state;
+    /*
     if (animator) {
         active_state = (renderer->render_mode == DUAL_RENDER_UNLIT) ? &renderer->shader_skeleton_unlit : &renderer->shader_skeleton;
     } else {
         active_state = (renderer->render_mode == DUAL_RENDER_UNLIT) ? &renderer->shader_unlit : &renderer->shader_lit;
     }
+    */
+    active_state = &renderer->current_shader;
 
     glUseProgram(active_state->program);
 
@@ -996,7 +1008,7 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
     glUniformMatrix4fv(active_state->uModel, 1, GL_FALSE, modele.m);
 
     /* --- OPTIMISATION : Matrice des Os via UBO (1 appel plutôt que 100) --- */
-    if (animator && (active_state == &renderer->shader_skeleton || active_state == &renderer->shader_skeleton_unlit)) {
+    if (animator) {
         glBindBuffer(GL_UNIFORM_BUFFER, renderer->ubo_bones);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, MAX_BONES * sizeof(DUAL_Mat4), animator->m_FinalBoneMatrices);
         glBindBuffer(GL_UNIFORM_BUFFER, 0);
@@ -1011,7 +1023,7 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
         }
 
         if (material && material->texture_diffuse) {
-            if (active_state == &renderer->shader_lit || active_state == &renderer->shader_skeleton) {
+            if (active_state->uMaterial_shininess != -1) {
                 glUniform1f(active_state->uMaterial_shininess, material->brillance);
             }
             glActiveTexture(GL_TEXTURE0);
@@ -1028,4 +1040,38 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
 
 void DUAL_DrawModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material** materials, DUAL_Transform3D transform) {
     DUAL_DrawAnimatedModel(renderer, model, materials, transform, NULL);
+}
+
+DUAL_Result DUAL_Renderer3D_LoadShader(DUAL_Renderer3D* renderer, char* vertex_shader, char* fragment_shader, GLuint* out_shader) {
+    DUAL_Result result = DUAL_OK;
+
+    GLuint vs_lit = CompileShader3D(GL_VERTEX_SHADER, vertex_shader, &result);
+    GLuint fs_lit = CompileShader3D(GL_FRAGMENT_SHADER, fragment_shader, &result);
+
+    if (result != DUAL_OK) {
+        return result;
+    }
+
+    GLuint shader = glCreateProgram();
+    glAttachShader(shader, vs_lit);
+    glAttachShader(shader, fs_lit);
+    glLinkProgram(shader);
+    glDeleteShader(vs_lit);
+    glDeleteShader(fs_lit);
+
+    renderer->active_shaders[4]->program = shader;
+    CacheShaderUniforms(renderer->active_shaders[4], true);
+
+    *out_shader = shader;
+
+    return DUAL_OK;
+}
+void DUAL_Renderer3D_ResetShader(DUAL_Renderer3D* renderer) {
+    renderer->current_shader = renderer->shader_skeleton;
+}
+
+void DUAL_Renderer3D_UseShader(DUAL_Renderer3D* renderer, GLuint shader) {
+    renderer->shader_custom.program = shader;
+    renderer->current_shader = renderer->shader_custom;
+    CacheShaderUniforms(&renderer->current_shader, true);
 }
