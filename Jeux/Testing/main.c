@@ -26,7 +26,7 @@ bool EstCartoucheInseree(const char* chemin) {
 /*
  *
  * Fonctionnalites a ajouter:
- *  - Shaders perso
+ *  - Shaders perso OK sauf lecture de shader via fichier + il faut fournir des shaders d exemple aux utilisateurs
  *  - Attenuation du son avec la distance 2D ou 3D
  *  - Systeme de particules
  *  - Simples collisions 2D/3D ainsi que des Raycast

@@ -5,6 +5,14 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+include(FetchContent)
+FetchContent_Declare(
+        box3d
+        GIT_REPOSITORY https://github.com/erincatto/box3d.git
+        GIT_TAG        main
+)
+FetchContent_MakeAvailable(box3d)
+
 # ========================================================================
 # 1. CONFIGURATION DU MOTEUR (L'exécutable principal)
 # ========================================================================
@@ -64,7 +72,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(OPUS REQUIRED opus opusfile)
 include_directories(${OPUS_INCLUDE_DIRS})
 
-target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
+target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
 
 
 # ========================================================================
@@ -157,3 +165,11 @@ target_include_directories(test_audio PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
 target_link_libraries(test_audio PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
+
+# Test Audio
+add_executable(test_physics_3d Jeux/Testing/test_physics_3d.c ${SDK_SOURCES})
+target_include_directories(test_physics_3d PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
+)
+target_link_libraries(test_physics_3d PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
