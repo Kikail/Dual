@@ -8,61 +8,14 @@
 #include "../../SDK/include/DUAL_Core/dual_core.h"
 #include "../../SDK/include/DUAL_Graphics/dual_graphics_2d.h"
 #include "../../SDK/include/DUAL_Resources/dual_resources.h"
-#include "dual_utils.h"
+#include "../../SDK/include/dual_utils.h"
+#include "../../SDK/include/DUAL_Graphics/camera2d.h"
 
 // Macro pour simuler notre image de chat de 128x128 en RGBA8
 #define IMAGE_WIDTH  128
 #define IMAGE_HEIGHT 128
 #define IMAGE_CHANNELS 4
 #define IMAGE_SIZE (IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS)
-
-const char* vertex_shader_src_main =
-    "#version 330 core\n"
-    "layout (location = 0) in vec2 aPos;\n"
-    "layout (location = 1) in vec2 aTexCoord;\n"
-    "layout (location = 2) in vec4 aColor;\n"
-    "out vec2 TexCoord;\n"
-    "out vec4 VertexColor;\n"
-    "uniform mat4 uProjection;\n"
-    "uniform mat4 uView;\n"
-    "void main() {\n"
-    "   gl_Position = uProjection * uView * vec4(aPos, 0.0, 1.0);\n"
-    "   TexCoord = aTexCoord;\n"
-    "   VertexColor = aColor;\n"
-    "}\n";
-
-const char* fragment_shader_src_main =
-    "#version 330 core\n"
-    "in vec2 TexCoord;\n"
-    "in vec4 VertexColor;\n"
-    "out vec4 FragColor;\n"
-    "uniform sampler2D uTexture;\n"
-    "uniform bool uUseTexture;\n"
-    "void main() {\n"
-    "   if (uUseTexture) {\n"
-    "       FragColor = texture(uTexture, TexCoord) * VertexColor * vec4(1.0, 0.0, 0.0, 1.0);\n"
-    "   } else {\n"
-    "       // Mode sans texture. Un UV avec x < -1.5 est le code pour DUAL_DrawRect\n"
-    "       if (TexCoord.x < -1.5) {\n"
-    "           FragColor = VertexColor;\n"
-    "           return;\n"
-    "       }\n"
-    "       // Mode procédural : DUAL_DrawCircleOutline (TexCoord de -1.0 à 1.0)\n"
-    "       float distance = length(TexCoord);\n"
-    "       \n"
-    "       float epaisseur = 0.05; // Ajuste ici l'épaisseur du trait (en % du rayon)\n"
-    "       float lissage = 0.01;   // Force de l'anti-aliasing\n"
-    "       \n"
-    "       // Anti-aliasing du bord extérieur et intérieur\n"
-    "       float alpha_ext = 1.0 - smoothstep(1.0 - lissage, 1.0, distance);\n"
-    "       float alpha_int = smoothstep(1.0 - epaisseur - lissage, 1.0 - epaisseur, distance);\n"
-    "       \n"
-    "       float final_alpha = alpha_ext * alpha_int;\n"
-    "       \n"
-    "       if (final_alpha <= 0.0) discard;\n"
-    "       FragColor = vec4(VertexColor.rgb, VertexColor.a * final_alpha);\n"
-    "   }\n"
-    "}\n";
 
 uint8_t* get_pixel_image(DUAL_ResourceManager* resourceManager) {
     uint8_t* cat_pixels = (uint8_t*)malloc(IMAGE_SIZE);
@@ -166,19 +119,15 @@ int main() {
     result = DUAL_Renderer2D_Create(app, &renderer2D);
     DEBUG_DUAL_RESULT(result);
 
-    // Utilisation de shader perso
-    GLuint shader;
-    result = DUAL_Renderer2D_LoadShader(renderer2D, vertex_shader_src_main, fragment_shader_src_main, &shader);
-    DEBUG_DUAL_RESULT(result);
-    DUAL_Renderer2D_UseShader(renderer2D, shader);
-    DUAL_Renderer2D_ResetShader(renderer2D);
-
     // Boucle du jeu principal
     while (DUAL_ShouldRun(app)) {
         DUAL_BeginFrame(app);
 
         // On deplace la camera
-        DUAL_Renderer2D_SetCameraPosition(renderer2D, (DUAL_Vec2){0.0, 200 * sin(DUAL_GetTime(app))});
+        DUAL_Camera2D* camera = DUAL_Renderer2D_GetCamera(renderer2D);
+        camera->position = (DUAL_Vec2){0.0, 200 * sin(DUAL_GetTime(app))};
+        camera->zoom = (sin(DUAL_GetTime(app)) + 1.05)/2 ;
+        camera->rotation = DUAL_GetTime(app);
 
         // On selectionne l'ecran du bas
         DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);

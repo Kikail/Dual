@@ -12,7 +12,7 @@
 #include "../../SDK/include/DUAL_Resources/dual_resources.h"
 #include "dual_utils.h"
 #include "../../SDK/include/DUAL_Graphics/shader.h"
-#include "DUAL_Graphics/camera.h"
+#include "DUAL_Graphics/camera3d.h"
 
 #define MODEL_AMBULANCE_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/cars/OBJ format/ambulance.obj"
 #define MODEL_FIRETRUCK_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/cars/OBJ format/firetruck.obj"
@@ -45,14 +45,9 @@ int main() {
     DUAL_Model* ambulanceModel = NULL;
     DUAL_Material** materials = NULL;
     unsigned int materialCount = 0;
-    result = DUAL_Model_Load(resourceManager, MODEL_CHARACTER_PATH, &ambulanceModel, &materialCount, &materials);
+    result = DUAL_Model_Load(resourceManager, MODEL_FIRETRUCK_PATH, &ambulanceModel, &materialCount, &materials);
     DEBUG_DUAL_RESULT(result);
 
-    Animation* animation = NULL;
-    result = DUAL_Animation_Load(ANIMATION_DANCE_2_PATH, ambulanceModel, &animation);
-    DEBUG_DUAL_RESULT(result);
-    Animator animator;
-    Animator_Init(&animator, animation);
 
     // Ajuster la position/échelle du personnage
     DUAL_Transform3D ambulanceTransform3D = {
@@ -102,7 +97,9 @@ int main() {
     DUAL_Shader shader;
     DUAL_Shader_load_VS_FS(&shader, "/home/killian/CLionProjects/Dual/SDK/internal_resources/shaders/i_shader_3d_skeletal_base.vs", "/home/killian/CLionProjects/Dual/SDK/internal_resources/shaders/i_shader_3d_unlit_base.fs", DUAL_SHADER_UNLIT);
     //DUAL_Renderer3D_UseCustomShader(renderer3D, &shader);
-    DUAL_Renderer3D_UseShader(renderer3D, LIT);
+    DUAL_Renderer3D_UseShader(renderer3D, SHADER3D_LIT);
+
+    double oldx = 0, oldy = 0;
 
     // Boucle du jeu principal
     while (DUAL_ShouldRun(app)) {
@@ -111,15 +108,21 @@ int main() {
         // On actualise les inputs
         DUAL_InputManager_Update(inputManager);
 
+        double x,y;
+        glfwGetCursorPos(DUAL_GetWindow(app), &x, &y);
+        DUAL_Camera3D_ProcessMouseMovement(DUAL_Renderer3D_GetCamera(renderer3D), x-oldx, y-oldy);
+        oldx = x;
+        oldy = y;
+
         // On change la projection si on appuie sur la touche du haut
         if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_UP)) {
-            DUAL_Camera* cam = DUAL_Renderer3D_GetCamera(renderer3D);
-            DUAL_Camera_ProcessKeyboard(cam, FORWARD, DUAL_GetDeltaTime(app));
+            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
+            DUAL_Camera3D_ProcessKeyboard(cam, FORWARD, DUAL_GetDeltaTime(app));
             DUAL_Log(DUAL_LOG_INFO, "%f %f %f", cam->position.x, cam->position.y, cam->position.z);
         }
         if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_DOWN)) {
-            DUAL_Camera* cam = DUAL_Renderer3D_GetCamera(renderer3D);
-            DUAL_Camera_ProcessKeyboard(cam, BACKWARD, DUAL_GetDeltaTime(app));
+            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
+            DUAL_Camera3D_ProcessKeyboard(cam, BACKWARD, DUAL_GetDeltaTime(app));
             DUAL_Log(DUAL_LOG_INFO, "%f %f %f", cam->position.x, cam->position.y, cam->position.z);
         }
         // On change le mode de rendu
@@ -130,8 +133,6 @@ int main() {
             DUAL_Renderer3D_SetRenderMode(renderer3D, rendererMode);
         }
 
-        // Actualisation de nos structures
-        Animator_UpdateAnimation(&animator, DUAL_GetDeltaTime(app));
 
         // On selectionne l'ecran du bas
         DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);
@@ -145,7 +146,7 @@ int main() {
         // On dessine nos images
         DUAL_Renderer3D_Begin(renderer3D);
         DUAL_Debug_Draw_Model_BoundingBox(renderer3D, DUAL_Model_GetBoundingBox(ambulanceModel), ambulanceTransform3D ,DUAL_VEC3_COLOR_BLUE);
-        DUAL_DrawAnimatedModel(renderer3D, ambulanceModel, materials, ambulanceTransform3D, &animator);
+        DUAL_DrawModel(renderer3D, ambulanceModel, materials, ambulanceTransform3D);
         DUAL_Renderer3D_End(renderer3D);
 
         DUAL_EndFrame(app);

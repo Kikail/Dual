@@ -20,7 +20,7 @@
 #include "../../include/DUAL_Core/dual_core.h"
 #include "../../include/DUAL_Resources/dual_resources.h"
 #include "../../include/dual_utils.h"
-#include "../../include/DUAL_Graphics/camera.h"
+#include "../../include/DUAL_Graphics/camera3d.h"
 
 extern void   DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h);
 extern GLuint DUAL_Internal_GetTextureID(const DUAL_Texture* texture);
@@ -64,7 +64,7 @@ struct DUAL_Material {
     DUAL_ResourceHandle* handle;
 };
 
-struct Internal_Shaders_s {
+struct Internal_Shaders3d_s {
     DUAL_Shader shader_lit;
     DUAL_Shader shader_unlit;
     DUAL_Shader shader_skeleton;
@@ -76,8 +76,8 @@ struct DUAL_Renderer3D {
     DUAL_App* app;
 
     // On creer une configuration de shaders de base dans le renderer
-    DUAL_Shader current_shader;
-    struct Internal_Shaders_s shaders;
+    DUAL_Shader* current_shader;
+    struct Internal_Shaders3d_s shaders;
 
     GLuint ubo_bones;
 
@@ -85,7 +85,7 @@ struct DUAL_Renderer3D {
     DUAL_RenderMode3D render_mode;
 
     /* Caméra */
-    DUAL_Camera camera;
+    DUAL_Camera3D camera;
 
     /* Projection */
     DUAL_ProjectionMode3D projection_mode;
@@ -618,7 +618,7 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_debug, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_debug_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_debug_base.fs", DUAL_SHADER_UNLIT);
 
     renderer->render_mode = DUAL_RENDER_LIT;
-    renderer->camera = DUAL_Camera_Create((DUAL_Vec3){0.0f, 0.0f, 0.0f}, DUAL_VECTOR_UP, DUAL_VECTOR_FRONT, DUAL_CAMERA_YAW, DUAL_CAMERA_PITCH, DUAL_CAMERA_SPEED, DUAL_CAMERA_SENSIVITY, DUAL_CAMERA_ZOOM);
+    renderer->camera = DUAL_Camera3D_Create((DUAL_Vec3){0.0f, 0.0f, 0.0f}, DUAL_VECTOR_UP, DUAL_VECTOR_FRONT, DUAL_CAMERA_YAW, DUAL_CAMERA_PITCH, DUAL_CAMERA_SPEED, DUAL_CAMERA_SENSIVITY, DUAL_CAMERA_ZOOM);
     renderer->projection_mode = DUAL_PROJECTION_PERSPECTIVE;
 
     renderer->fov_radians = 1.0471975512f;
@@ -651,9 +651,9 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
-    DUAL_Renderer3D_UseShader(renderer, SHADER_DEBUG);
-    DUAL_Shader_setVec3(&renderer->current_shader, "uColor", (DUAL_Vec3){1.0f, 1.0f, 1.0f});
-    DUAL_Renderer3D_UseShader(renderer, LIT);
+    DUAL_Renderer3D_UseShader(renderer, SHADER3D_SHADER_DEBUG);
+    DUAL_Shader_setVec3(renderer->current_shader, "uColor", (DUAL_Vec3){1.0f, 1.0f, 1.0f});
+    DUAL_Renderer3D_UseShader(renderer, SHADER3D_LIT);
 
     *out_renderer = renderer;
     return DUAL_OK;
@@ -734,21 +734,21 @@ void DUAL_Renderer3D_End(DUAL_Renderer3D* renderer) {
         glBindBuffer(GL_ARRAY_BUFFER, renderer->debug_renderer.vbo);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(LineVertex) * renderer->debug_renderer.count, renderer->debug_renderer.vertices);
 
-        DUAL_Shader previous_shader = renderer->current_shader;
+        DUAL_Shader* previous_shader = renderer->current_shader;
 
-        DUAL_Renderer3D_UseShader(renderer, SHADER_DEBUG);
-        DUAL_Shader_use(&renderer->current_shader);
+        DUAL_Renderer3D_UseShader(renderer, SHADER3D_SHADER_DEBUG);
+        DUAL_Shader_use(renderer->current_shader);
 
-        DUAL_Shader_setMat4(&renderer->current_shader, "uModel", DUAL_Mat4_Identity());
-        DUAL_Shader_setMat4(&renderer->current_shader, "uView", DUAL_Camera_GetViewMatrix(&renderer->camera));
-        DUAL_Shader_setMat4(&renderer->current_shader, "uProjection", renderer->perspective_projection);
+        DUAL_Shader_setMat4(renderer->current_shader, "uModel", DUAL_Mat4_Identity());
+        DUAL_Shader_setMat4(renderer->current_shader, "uView", DUAL_Camera3D_GetViewMatrix(&renderer->camera));
+        DUAL_Shader_setMat4(renderer->current_shader, "uProjection", renderer->perspective_projection);
 
         glBindVertexArray(renderer->debug_renderer.vao);
         glDrawArrays(GL_LINES, 0, (GLsizei)renderer->debug_renderer.count);
         glBindVertexArray(0);
 
         renderer->current_shader = previous_shader;
-        DUAL_Shader_use(&renderer->current_shader);
+        DUAL_Shader_use(renderer->current_shader);
 
         renderer->debug_renderer.count = 0;
     }
@@ -765,7 +765,7 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
 
     if (!materials) materials = (const DUAL_Material**)model->materials;
 
-    DUAL_Shader_use(&renderer->current_shader);
+    DUAL_Shader_use(renderer->current_shader);
 
     DUAL_Mat4 scale   = DUAL_Mat4_Scale(transform.echelle);
     DUAL_Mat4 rot_x   = DUAL_Mat4_Rotate((DUAL_Vec3){ 1.0f, 0.0f, 0.0f }, transform.rotation_euler_radians.x);
@@ -775,21 +775,21 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
     DUAL_Mat4 modele  = DUAL_Mat4_Multiply(trans, DUAL_Mat4_Multiply(DUAL_Mat4_Multiply(rot_z, DUAL_Mat4_Multiply(rot_y, rot_x)), scale));
 
     // On envoit les matrices au shader
-    DUAL_Shader_setMat4(&renderer->current_shader, "uModel", modele);
-    DUAL_Shader_setMat4(&renderer->current_shader, "uView", DUAL_Camera_GetViewMatrix(&renderer->camera));
+    DUAL_Shader_setMat4(renderer->current_shader, "uModel", modele);
+    DUAL_Shader_setMat4(renderer->current_shader, "uView", DUAL_Camera3D_GetViewMatrix(&renderer->camera));
     if (renderer->projection_mode == DUAL_PROJECTION_PERSPECTIVE) {
-        DUAL_Shader_setMat4(&renderer->current_shader, "uProjection", renderer->perspective_projection);
+        DUAL_Shader_setMat4(renderer->current_shader, "uProjection", renderer->perspective_projection);
     }
     else {
-        DUAL_Shader_setMat4(&renderer->current_shader, "uProjection", renderer->orthographic_projection);
+        DUAL_Shader_setMat4(renderer->current_shader, "uProjection", renderer->orthographic_projection);
     }
 
     if (animator) {
-        DUAL_Shader_setMat4Array(&renderer->current_shader, "uFinalBonesMatrices", MAX_BONES, animator->m_FinalBoneMatrices);
+        DUAL_Shader_setMat4Array(renderer->current_shader, "uFinalBonesMatrices", MAX_BONES, animator->m_FinalBoneMatrices);
     }
 
-    if (renderer->current_shader.renderMode == DUAL_SHADER_LIT) {
-        DUAL_Renderer3d_SendLightInfosToShader(renderer, &renderer->current_shader);
+    if (renderer->current_shader->renderMode == DUAL_SHADER_LIT) {
+        DUAL_Renderer3d_SendLightInfosToShader(renderer, renderer->current_shader);
     }
 
     for (uint32_t i = 0; i < model->mesh_count; i++) {
@@ -803,7 +803,7 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
         if (material && material->texture_diffuse) {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, DUAL_Internal_GetTextureID(material->texture_diffuse));
-            glUniform1i(glGetUniformLocation(renderer->current_shader.shaderID, "texture_diffuse"), 0);
+            glUniform1i(glGetUniformLocation(renderer->current_shader->shaderID, "texture_diffuse"), 0);
         } else {
             glBindTexture(GL_TEXTURE_2D, 0);
         }
@@ -834,20 +834,20 @@ void DUAL_DrawModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DU
 void DUAL_Renderer3D_UseShader(DUAL_Renderer3D* renderer, DUAL_Renderer3d_Shaders shader) {
     if (!renderer) return;
     switch (shader) {
-        case LIT:
-            renderer->current_shader = renderer->shaders.shader_lit;
+        case SHADER3D_LIT:
+            renderer->current_shader = &renderer->shaders.shader_lit;
             break;
-        case UNLIT:
-            renderer->current_shader = renderer->shaders.shader_unlit;
+        case SHADER3D_UNLIT:
+            renderer->current_shader = &renderer->shaders.shader_unlit;
             break;
-        case SKELETAL_LIT:
-            renderer->current_shader = renderer->shaders.shader_skeleton;
+        case SHADER3D_SKELETAL_LIT:
+            renderer->current_shader = &renderer->shaders.shader_skeleton;
             break;
-        case SKELETAL_UNLIT:
-            renderer->current_shader = renderer->shaders.shader_skeleton_unlit;
+        case SHADER3D_SKELETAL_UNLIT:
+            renderer->current_shader = &renderer->shaders.shader_skeleton_unlit;
             break;
-        case SHADER_DEBUG:
-            renderer->current_shader = renderer->shaders.shader_debug;
+        case SHADER3D_SHADER_DEBUG:
+            renderer->current_shader = &renderer->shaders.shader_debug;
             break;
         default:
             break;
@@ -855,9 +855,9 @@ void DUAL_Renderer3D_UseShader(DUAL_Renderer3D* renderer, DUAL_Renderer3d_Shader
 }
 void DUAL_Renderer3D_UseCustomShader(DUAL_Renderer3D* renderer, DUAL_Shader* shader) {
     if (!renderer || !shader) return;
-    renderer->current_shader = *shader;
+    renderer->current_shader = shader;
 }
-DUAL_Camera* DUAL_Renderer3D_GetCamera(DUAL_Renderer3D* renderer) {
+DUAL_Camera3D* DUAL_Renderer3D_GetCamera(DUAL_Renderer3D* renderer) {
     return &renderer->camera;
 }
 
@@ -910,13 +910,13 @@ void DUAL_Debug_Render(DUAL_Renderer3D* debug, DUAL_Renderer3D* renderer) {
     glBindBuffer(GL_ARRAY_BUFFER, debug->debug_renderer.vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(LineVertex) * debug->debug_renderer.count, debug->debug_renderer.vertices);
 
-    DUAL_Shader* current_shader = &renderer->current_shader;
+    DUAL_Shader* current_shader = renderer->current_shader;
 
-    DUAL_Renderer3D_UseShader(renderer, SHADER_DEBUG);
-    DUAL_Shader_use(&renderer->current_shader);
-    DUAL_Shader_setMat4(&renderer->current_shader, "uModel", DUAL_Mat4_Identity());
-    DUAL_Shader_setMat4(&renderer->current_shader, "uView", DUAL_Camera_GetViewMatrix(&renderer->camera));
-    DUAL_Shader_setMat4(&renderer->current_shader, "uProjection", renderer->perspective_projection);
+    DUAL_Renderer3D_UseShader(renderer, SHADER3D_SHADER_DEBUG);
+    DUAL_Shader_use(renderer->current_shader);
+    DUAL_Shader_setMat4(renderer->current_shader, "uModel", DUAL_Mat4_Identity());
+    DUAL_Shader_setMat4(renderer->current_shader, "uView", DUAL_Camera3D_GetViewMatrix(&renderer->camera));
+    DUAL_Shader_setMat4(renderer->current_shader, "uProjection", renderer->perspective_projection);
 
     glBindVertexArray(debug->debug_renderer.vao);
     glDrawArrays(GL_LINES, 0, debug->debug_renderer.count);

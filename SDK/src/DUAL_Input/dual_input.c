@@ -51,15 +51,6 @@ DUAL_Result DUAL_InputManager_Create(DUAL_App* app, DUAL_InputManager** out_inpu
         input->previous_buttons[i] = false;
     }
 
-    /* MAPPING CLAVIER PC PAR DÉFAUT (Ajustable selon tes préférences)
-     *
-     * IMPORTANT : le stick analogique (simulé plus bas par ZQSD) réserve les
-     * touches Z, Q, S et D. Ces 4 touches ne doivent JAMAIS être également
-     * assignées à un bouton ci-dessous : une touche utilisée pour les deux
-     * déclencherait le bouton en même temps que le déplacement du stick, ce
-     * qui donne l'impression que le bouton reste enfoncé en boucle pendant
-     * qu'on se déplace. C'était le cas de X (sur S), Y (sur D) et R (sur Z)
-     * dans une version précédente : ils ont été déplacés ci-dessous. */
     input->mapping_clavier[DUAL_BUTTON_A]      = GLFW_KEY_X;           /* X pour valider */
     input->mapping_clavier[DUAL_BUTTON_B]      = GLFW_KEY_C;           /* C pour annuler */
     input->mapping_clavier[DUAL_BUTTON_X]      = GLFW_KEY_V;           /* Anciennement S : entrait en conflit avec le stick */

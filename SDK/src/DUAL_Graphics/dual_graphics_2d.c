@@ -16,6 +16,8 @@
 /* Configuration et inclusion de STB Truetype */
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
+#include "../../include/DUAL_Graphics/camera2d.h"
+#include "../../include/DUAL_Graphics/shader.h"
 
 /* Déclarations externes pour interroger la configuration de l'écran */
 extern void DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h);
@@ -44,92 +46,27 @@ typedef struct {
     DUAL_Color couleur;
 } Vertex2D;
 
+
+struct Internal_Shaders2d_s {
+    DUAL_Shader base_shader;
+};
 struct DUAL_Renderer2D {
     DUAL_App* app;
     GLuint vao, vbo;
-    
-    GLuint current_shader_program;
-    GLuint default_shader_program;
+
+    DUAL_Shader* current_shader;
+    struct Internal_Shaders2d_s shaders;
 
     // Caméra
-    DUAL_Vec2 camera_pos;
-    float camera_zoom;
-    float camera_rotation;
+    DUAL_Camera2D camera;
 
     // Système de Batching
     Vertex2D* vertex_buffer;
     uint32_t vertex_count;
     uint32_t max_vertices;
-    DUAL_Texture* texture_courante; // Texture active pour le batch actuel
+    DUAL_Texture* texture_courante;
 };
 
-/* ============================================================================
- * Shaders 2D intégrés
- * ========================================================================== */
-
-const char* vertex_shader_src =
-    "#version 330 core\n"
-    "layout (location = 0) in vec2 aPos;\n"
-    "layout (location = 1) in vec2 aTexCoord;\n"
-    "layout (location = 2) in vec4 aColor;\n"
-    "out vec2 TexCoord;\n"
-    "out vec4 VertexColor;\n"
-    "uniform mat4 uProjection;\n"
-    "uniform mat4 uView;\n"
-    "void main() {\n"
-    "   gl_Position = uProjection * uView * vec4(aPos, 0.0, 1.0);\n"
-    "   TexCoord = aTexCoord;\n"
-    "   VertexColor = aColor;\n"
-    "}\n";
-
-const char* fragment_shader_src =
-    "#version 330 core\n"
-    "in vec2 TexCoord;\n"
-    "in vec4 VertexColor;\n"
-    "out vec4 FragColor;\n"
-    "uniform sampler2D uTexture;\n"
-    "uniform bool uUseTexture;\n"
-    "void main() {\n"
-    "   if (uUseTexture) {\n"
-    "       FragColor = texture(uTexture, TexCoord) * VertexColor;\n"
-    "   } else {\n"
-    "       // Mode sans texture. Un UV avec x < -1.5 est le code pour DUAL_DrawRect\n"
-    "       if (TexCoord.x < -1.5) {\n"
-    "           FragColor = VertexColor;\n"
-    "           return;\n"
-    "       }\n"
-    "       // Mode procédural : DUAL_DrawCircleOutline (TexCoord de -1.0 à 1.0)\n"
-    "       float distance = length(TexCoord);\n"
-    "       \n"
-    "       float epaisseur = 0.05; // Ajuste ici l'épaisseur du trait (en % du rayon)\n"
-    "       float lissage = 0.01;   // Force de l'anti-aliasing\n"
-    "       \n"
-    "       // Anti-aliasing du bord extérieur et intérieur\n"
-    "       float alpha_ext = 1.0 - smoothstep(1.0 - lissage, 1.0, distance);\n"
-    "       float alpha_int = smoothstep(1.0 - epaisseur - lissage, 1.0 - epaisseur, distance);\n"
-    "       \n"
-    "       float final_alpha = alpha_ext * alpha_int;\n"
-    "       \n"
-    "       if (final_alpha <= 0.0) discard;\n"
-    "       FragColor = vec4(VertexColor.rgb, VertexColor.a * final_alpha);\n"
-    "   }\n"
-    "}\n";
-
-static GLuint CompileShader(GLenum type, const char* source, DUAL_Result* result) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, NULL);
-    glCompileShader(shader);
-    int success;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        glGetShaderInfoLog(shader, 512, NULL, infoLog);
-        printf("[ERREUR SHADER] %s\n", infoLog);
-        *result = DUAL_ERROR_INIT_FAILED;
-    }
-    *result = DUAL_OK;
-    return shader;
-}
 
 /* ============================================================================
  * GESTION DES TEXTURES (stb_image)
@@ -226,18 +163,12 @@ DUAL_Result DUAL_Renderer2D_Create(DUAL_App* app, DUAL_Renderer2D** out_renderer
     renderer->app = app;
 
     DUAL_Result result = DUAL_OK;
+    bool compilation_result = true;
+    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.base_shader, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_2d_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_2d_base.fs", DUAL_SHADER_LIT);
 
-    GLuint vs = CompileShader(GL_VERTEX_SHADER, vertex_shader_src, &result);
-    GLuint fs = CompileShader(GL_FRAGMENT_SHADER, fragment_shader_src, &result);
-    renderer->default_shader_program = glCreateProgram();
-    glAttachShader(renderer->default_shader_program, vs);
-    glAttachShader(renderer->default_shader_program, fs);
-    glLinkProgram(renderer->default_shader_program);
-    glDeleteShader(vs);
-    glDeleteShader(fs);
 
     // On assigne le shader par defaut dans le shader principal
-    renderer->current_shader_program = renderer->default_shader_program;
+    renderer->current_shader = &renderer->shaders.base_shader;
 
     renderer->max_vertices = 2000 * 4;
     renderer->vertex_count = 0;
@@ -258,9 +189,9 @@ DUAL_Result DUAL_Renderer2D_Create(DUAL_App* app, DUAL_Renderer2D** out_renderer
     glEnableVertexAttribArray(2);
     glBindVertexArray(0);
 
-    renderer->camera_pos = (DUAL_Vec2){0.0f, 0.0f};
-    renderer->camera_zoom = 1.0f;
-    renderer->camera_rotation = 0.0f;
+    renderer->camera.position = (DUAL_Vec2){0.0f, 0.0f};
+    renderer->camera.zoom = 1.0f;
+    renderer->camera.rotation = 0.0f;
 
     *out_renderer = renderer;
     return DUAL_OK;
@@ -270,7 +201,6 @@ void DUAL_Renderer2D_Destroy(DUAL_Renderer2D* renderer) {
     if (renderer) {
         glDeleteVertexArrays(1, &renderer->vao);
         glDeleteBuffers(1, &renderer->vbo);
-        glDeleteProgram(renderer->default_shader_program);
         free(renderer->vertex_buffer);
         free(renderer);
     }
@@ -279,25 +209,26 @@ void DUAL_Renderer2D_Destroy(DUAL_Renderer2D* renderer) {
 static void FlushBatch(DUAL_Renderer2D* renderer) {
     if (renderer->vertex_count == 0) return;
 
-    glUseProgram(renderer->current_shader_program);
+    DUAL_Shader_use(renderer->current_shader);
 
     int32_t w, h;
     DUAL_Internal_GetScreenDimensions(renderer->app, &w, &h);
     DUAL_Mat4 projection = DUAL_Mat4_Ortho(0.0f, (float)w, (float)h, 0.0f, -1.0f, 1.0f);
 
-    DUAL_Mat4 view = DUAL_Mat4_Identity();
-    view = DUAL_Mat4_Multiply(view, DUAL_Mat4_Translate((DUAL_Vec3){-renderer->camera_pos.x, -renderer->camera_pos.y, 0.0f}));
+    DUAL_Mat4 view = DUAL_Camera2D_GetViewMatrix(&renderer->camera);
 
-    glUniformMatrix4fv(glGetUniformLocation(renderer->current_shader_program, "uProjection"), 1, GL_FALSE, projection.m);
-    glUniformMatrix4fv(glGetUniformLocation(renderer->current_shader_program, "uView"), 1, GL_FALSE, view.m);
+    DUAL_Shader_setMat4(renderer->current_shader, "uProjection", projection);
+    DUAL_Shader_setMat4(renderer->current_shader, "uView", view);
 
-    // Configuration de l'uniform booléen uUseTexture
-    GLint use_tex_loc = glGetUniformLocation(renderer->current_shader_program, "uUseTexture");
-    if (renderer->texture_courante) {
-        glUniform1i(use_tex_loc, 1);
+    // BIND DE LA TEXTURE ET UNIFORM
+    if (renderer->texture_courante && renderer->texture_courante->id_opengl != 0) {
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, renderer->texture_courante->id_opengl);
+        DUAL_Shader_setInt(renderer->current_shader, "uTexture", 0);
+        DUAL_Shader_setBool(renderer->current_shader, "uUseTexture", true);
     } else {
-        glUniform1i(use_tex_loc, 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        DUAL_Shader_setBool(renderer->current_shader, "uUseTexture", false);
     }
 
     glBindVertexArray(renderer->vao);
@@ -310,14 +241,9 @@ static void FlushBatch(DUAL_Renderer2D* renderer) {
     renderer->vertex_count = 0;
 }
 
-void DUAL_Renderer2D_SetCameraPosition(DUAL_Renderer2D* renderer, DUAL_Vec2 position) {
-    renderer->camera_pos = position;
-}
-void DUAL_Renderer2D_SetCameraZoom(DUAL_Renderer2D* renderer, float zoom) {
-    renderer->camera_zoom = zoom;
-}
-void DUAL_Renderer2D_SetCameraRotation(DUAL_Renderer2D* renderer, float rotation_radians) {
-    renderer->camera_rotation = rotation_radians;
+DUAL_Camera2D* DUAL_Renderer2D_GetCamera(DUAL_Renderer2D* renderer) {
+    if (!renderer) return NULL;
+    return &renderer->camera;
 }
 
 void DUAL_Renderer2D_Begin(DUAL_Renderer2D* renderer) {
@@ -611,7 +537,6 @@ void DUAL_DrawCircleOutline(DUAL_Renderer2D* renderer, DUAL_Circle cercle, DUAL_
     DUAL_Vec2 p2 = { x1, y1 };
     DUAL_Vec2 p3 = { x0, y1 };
 
-    // Coordonnées UV mappées de -1.0 à 1.0 (le fragment shader s'occupe de l'arrondi)
     DUAL_Vec2 uv0 = { -1.0f, -1.0f };
     DUAL_Vec2 uv1 = {  1.0f, -1.0f };
     DUAL_Vec2 uv2 = {  1.0f,  1.0f };
@@ -630,37 +555,18 @@ void DUAL_DrawCircleOutline(DUAL_Renderer2D* renderer, DUAL_Circle cercle, DUAL_
     renderer->vertex_count = idx;
 }
 
-DUAL_Result DUAL_Renderer2D_LoadShader(DUAL_Renderer2D* renderer, char* vertex_shader, char* fragment_shader, GLuint* out_shader) {
-    if (!renderer) return DUAL_ERROR_INVALID_ARG;
-
-    DUAL_Result result;
-    GLuint vs = CompileShader(GL_VERTEX_SHADER, vertex_shader, &result);
-    GLuint fs = CompileShader(GL_FRAGMENT_SHADER, fragment_shader, &result);
-
-    if (result != DUAL_OK) {
-        return result;
+void DUAL_Renderer2D_UseShader(DUAL_Renderer2D* renderer, DUAL_Renderer2d_Shaders shader) {
+    if (!renderer) return;
+    switch (shader) {
+        case SHADER2D_DEFAULT:
+            renderer->current_shader = &renderer->shaders.base_shader;
+            break;
+        default:
+            break;
     }
-
-    GLuint shader = glCreateProgram();
-    glAttachShader(shader, vs);
-    glAttachShader(shader, fs);
-    glLinkProgram(shader);
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-
-    *out_shader = shader;
-
-    return DUAL_OK;
 }
 
-void DUAL_Renderer2D_ResetShader(DUAL_Renderer2D* renderer) {
-    if (!renderer) return;
-
-    renderer->current_shader_program = renderer->default_shader_program;
-}
-
-void DUAL_Renderer2D_UseShader(DUAL_Renderer2D* renderer, GLuint shader) {
-    if (!renderer) return;
-
-    renderer->current_shader_program = shader;
+void DUAL_Renderer2D_UseCustomShader(DUAL_Renderer2D* renderer, DUAL_Shader* shader) {
+    if (!renderer || !shader) return;
+    renderer->current_shader = shader;
 }

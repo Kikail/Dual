@@ -47,6 +47,9 @@ typedef struct DUAL_Font DUAL_Font;
  */
 typedef struct DUAL_Renderer2D DUAL_Renderer2D;
 
+typedef struct DUAL_Shader DUAL_Shader;
+typedef struct DUAL_Camera2D DUAL_Camera2D;
+
 /* ============================================================================
  *  Enumérations
  * ========================================================================== */
@@ -67,6 +70,10 @@ typedef enum DUAL_BlendMode {
     DUAL_BLEND_ADDITIVE = 1, /**< Mélange additif (effets lumineux, particules). */
     DUAL_BLEND_NONE     = 2  /**< Aucun mélange, écrasement opaque des pixels. */
 } DUAL_BlendMode;
+
+typedef enum DUAL_Renderer2d_Shaders {
+    SHADER2D_DEFAULT
+}DUAL_Renderer2d_Shaders;
 
 /* ============================================================================
  *  Structures
@@ -165,29 +172,7 @@ DUAL_Result DUAL_Renderer2D_Create(DUAL_App* app, DUAL_Renderer2D** out_renderer
  */
 void DUAL_Renderer2D_Destroy(DUAL_Renderer2D* renderer);
 
-/**
- * @brief Définit la position de la caméra 2D pour l'écran actif.
- *
- * @param renderer Contexte de rendu 2D.
- * @param position Nouvelle position du centre de la caméra, en coordonnées monde.
- */
-void DUAL_Renderer2D_SetCameraPosition(DUAL_Renderer2D* renderer, DUAL_Vec2 position);
-
-/**
- * @brief Définit le niveau de zoom de la caméra 2D pour l'écran actif.
- *
- * @param renderer Contexte de rendu 2D.
- * @param zoom Facteur de zoom (1.0 = échelle native, supérieur à 1.0 = rapproché).
- */
-void DUAL_Renderer2D_SetCameraZoom(DUAL_Renderer2D* renderer, float zoom);
-
-/**
- * @brief Définit la rotation de la caméra 2D pour l'écran actif.
- *
- * @param renderer Contexte de rendu 2D.
- * @param rotation_radians Angle de rotation de la caméra, en radians.
- */
-void DUAL_Renderer2D_SetCameraRotation(DUAL_Renderer2D* renderer, float rotation_radians);
+DUAL_Camera2D* DUAL_Renderer2D_GetCamera(DUAL_Renderer2D* renderer);
 
 /**
  * @brief Démarre un lot (batch) de dessin de sprites pour l'écran actif.
@@ -300,9 +285,9 @@ void DUAL_MeasureText(const DUAL_Font* font, const char* texte,
  *  Shaders
  * ========================================================================== */
 
-DUAL_Result DUAL_Renderer2D_LoadShader(DUAL_Renderer2D* renderer, char* vertex_shader, char* fragment_shader, GLuint* out_shader);
-void DUAL_Renderer2D_ResetShader(DUAL_Renderer2D* renderer);
-void DUAL_Renderer2D_UseShader(DUAL_Renderer2D* renderer, GLuint shader);
+void DUAL_Renderer2D_UseShader(DUAL_Renderer2D* renderer, DUAL_Renderer2d_Shaders shader);
+void DUAL_Renderer2D_UseCustomShader(DUAL_Renderer2D* renderer, DUAL_Shader* shader);
+
 
 #ifdef __cplusplus
 }

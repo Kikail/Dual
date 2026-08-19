@@ -36,7 +36,7 @@ typedef struct AssimpNodeData AssimpNodeData;
 typedef struct Animation Animation;
 typedef struct Animator Animator;
 typedef struct DUAL_Shader DUAL_Shader;
-typedef struct DUAL_Camera DUAL_Camera;
+typedef struct DUAL_Camera3D DUAL_Camera3D;
 
 /* ============================================================================
  *  Énumérations
@@ -140,14 +140,14 @@ struct Animator {
 };
 
 typedef enum DUAL_Renderer3d_Shaders {
-    LIT,
-    UNLIT,
-    SKELETAL_LIT,
-    SKELETAL_UNLIT,
-    SHADER_DEBUG
+    SHADER3D_LIT,
+    SHADER3D_UNLIT,
+    SHADER3D_SKELETAL_LIT,
+    SHADER3D_SKELETAL_UNLIT,
+    SHADER3D_SHADER_DEBUG
 }DUAL_Renderer3d_Shaders;
 
-DUAL_Camera* DUAL_Renderer3D_GetCamera(DUAL_Renderer3D* renderer);
+DUAL_Camera3D* DUAL_Renderer3D_GetCamera(DUAL_Renderer3D* renderer);
 
 /* ============================================================================
  *  Chargement et gestion des modèles
