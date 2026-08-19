@@ -20,7 +20,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
-#include "dual_math.h"
+#include "../DUAL_Math/dual_math.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,6 +56,15 @@ typedef struct DUAL_Color {
 #define DUAL_COLOR_CYAN (DUAL_Color){0.0, 1.0, 1.0, 1.0}
 #define DUAL_COLOR_WHITE (DUAL_Color){1.0, 1.0, 1.0, 1.0}
 #define DUAL_COLOR_BLACK (DUAL_Color){0.0, 0.0, 0.0, 1.0}
+
+#define DUAL_VEC3_COLOR_RED (DUAL_Vec3){1.0, 0.0, 0.0}
+#define DUAL_VEC3_COLOR_GREEN (DUAL_Vec3){0.0, 1.0, 0.0}
+#define DUAL_VEC3_COLOR_BLUE (DUAL_Vec3){0.0, 0.0, 1.0}
+#define DUAL_VEC3_COLOR_YELLOW (DUAL_Vec3){1.0, 1.0, 0.0}
+#define DUAL_VEC3_COLOR_MAGENTA (DUAL_Vec3){1.0, 0.0, 1.0}
+#define DUAL_VEC3_COLOR_CYAN (DUAL_Vec3){0.0, 1.0, 1.0}
+#define DUAL_VEC3_COLOR_WHITE (DUAL_Vec3){1.0, 1.0, 1.0}
+#define DUAL_VEC3_COLOR_BLACK (DUAL_Vec3){0.0, 0.0, 0.0}
 
 /* ============================================================================
  *  Enumérations
@@ -262,6 +271,12 @@ GLFWwindow* DUAL_GetWindow(const DUAL_App* app);
  * @param ... Arguments variadiques correspondant au format.
  */
 void DUAL_Log(DUAL_LogLevel niveau, const char* format, ...);
+
+/* ============================================================================
+ *  Utility
+ * ========================================================================== */
+
+DUAL_Result DUAL_LoadFile(const char* filename, char* buffer, size_t buffer_size);
 
 #ifdef __cplusplus
 }

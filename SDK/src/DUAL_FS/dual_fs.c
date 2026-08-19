@@ -3,7 +3,7 @@
  * @brief Implémentation du système de fichiers de libdual.
  */
 
-#include "dual_fs.h"
+#include "../../include/DUAL_FS/dual_fs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

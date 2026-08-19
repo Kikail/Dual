@@ -4,10 +4,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "dual_audio.h"
-#include "dual_core.h"
-#include "dual_input.h"
-#include "dual_resources.h"
+#include "../../SDK/include/DUAL_Audio/dual_audio.h"
+#include "../../SDK/include/DUAL_Core/dual_core.h"
+#include "../../SDK/include/DUAL_Input/dual_input.h"
+#include "../../SDK/include/DUAL_Resources/dual_resources.h"
 #include "dual_utils.h"
 
 #define SOUND_FX_1 "/home/killian/CLionProjects/Dual/Jeux/resources/sounds/sfx/jingles_NES00.mp3"

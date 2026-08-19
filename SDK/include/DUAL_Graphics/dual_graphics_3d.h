@@ -9,9 +9,9 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "dual_core.h"
-#include "dual_math.h"
-#include "dual_resources.h"
+#include "../DUAL_Core/dual_core.h"
+#include "../DUAL_Math/dual_math.h"
+#include "../DUAL_Resources/dual_resources.h"
 #include "dual_graphics_2d.h"
 
 #ifdef __cplusplus
@@ -35,6 +35,8 @@ typedef struct Bone Bone;
 typedef struct AssimpNodeData AssimpNodeData;
 typedef struct Animation Animation;
 typedef struct Animator Animator;
+typedef struct DUAL_Shader DUAL_Shader;
+typedef struct DUAL_Camera DUAL_Camera;
 
 /* ============================================================================
  *  Énumérations
@@ -137,6 +139,16 @@ struct Animator {
     float m_DeltaTime;
 };
 
+typedef enum DUAL_Renderer3d_Shaders {
+    LIT,
+    UNLIT,
+    SKELETAL_LIT,
+    SKELETAL_UNLIT,
+    SHADER_DEBUG
+}DUAL_Renderer3d_Shaders;
+
+DUAL_Camera* DUAL_Renderer3D_GetCamera(DUAL_Renderer3D* renderer);
+
 /* ============================================================================
  *  Chargement et gestion des modèles
  * ========================================================================== */
@@ -152,7 +164,6 @@ uint32_t DUAL_Model_GetMeshCount(const DUAL_Model* model);
 
 DUAL_Result DUAL_Material_Create(DUAL_ResourceManager* resources, DUAL_Texture* texture_diffuse, DUAL_Material** out_material);
 void DUAL_Material_Destroy(DUAL_ResourceManager* resources, DUAL_Material* material);
-void DUAL_Material_SetShininess(DUAL_Material* material, float brillance);
 
 /* ============================================================================
  *  Animations & Bones
@@ -169,16 +180,11 @@ void Bone_Update(Bone* bone, float animationTime);
 
 DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer);
 void DUAL_Renderer3D_Destroy(DUAL_Renderer3D* renderer);
-
-void DUAL_Renderer3D_SetCameraLookAt(DUAL_Renderer3D* renderer, DUAL_Vec3 position, DUAL_Vec3 cible, DUAL_Vec3 haut);
-void DUAL_Renderer3D_SetCameraPosition(DUAL_Renderer3D* renderer, DUAL_Vec3 position);
 void DUAL_Renderer3D_SetProjection(DUAL_Renderer3D* renderer, float fov_radians, float plan_proche, float plan_lointain);
 void DUAL_Renderer3D_SetProjectionMode(DUAL_Renderer3D* renderer, DUAL_ProjectionMode3D mode);
 void DUAL_Renderer3D_SetOrthographic(DUAL_Renderer3D* renderer, float demi_hauteur, float plan_proche, float plan_lointain);
 void DUAL_Renderer3D_SetCullMode(DUAL_Renderer3D* renderer, DUAL_CullMode mode);
-
 void DUAL_Renderer3D_SetRenderMode(DUAL_Renderer3D* renderer, DUAL_RenderMode3D mode);
-
 void DUAL_Renderer3D_Begin(DUAL_Renderer3D* renderer);
 void DUAL_Renderer3D_End(DUAL_Renderer3D* renderer);
 
@@ -199,11 +205,33 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
 /* ============================================================================
  *  Shaders
  * ========================================================================== */
+void DUAL_Renderer3D_UseCustomShader(DUAL_Renderer3D* renderer, DUAL_Shader* shader);
+void DUAL_Renderer3D_UseShader(DUAL_Renderer3D* renderer, DUAL_Renderer3d_Shaders shader);
+void DUAL_Renderer3d_SendLightInfosToShader(DUAL_Renderer3D* renderer, DUAL_Shader* shader);
 
-DUAL_Result DUAL_Renderer3D_LoadShader(DUAL_Renderer3D* renderer, char* vertex_shader, char* fragment_shader, GLuint* out_shader);
-void DUAL_Renderer3D_ResetShader(DUAL_Renderer3D* renderer);
-void DUAL_Renderer3D_UseShader(DUAL_Renderer3D* renderer, GLuint shader);
+/* ============================================================================
+ *  Debug
+ * ========================================================================== */
 
+#define DUAL_DEBUG_MAX_VERTICES 20000
+
+typedef struct {
+    DUAL_Vec3 position;
+    DUAL_Vec3 color;
+} LineVertex;
+
+typedef struct {
+    GLuint vao, vbo;
+    LineVertex vertices[DUAL_DEBUG_MAX_VERTICES];
+    uint32_t capacity;
+    uint32_t count;
+} DUAL_DebugRenderer3D;
+
+void DUAL_Debug_DrawLine(DUAL_Renderer3D* debug, DUAL_Vec3 start, DUAL_Vec3 end, DUAL_Vec3 color);
+void DUAL_Debug_DrawCircle(DUAL_Renderer3D* debug, DUAL_Vec3 center, float radius, int segments, DUAL_Vec3 color);
+void DUAL_Debug_DrawAABB(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Vec3 color);
+void DUAL_Debug_Render(DUAL_Renderer3D* debug, DUAL_Renderer3D* renderer);
+void DUAL_Debug_Draw_Model_BoundingBox(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Transform3D transform, DUAL_Vec3 color);
 
 #ifdef __cplusplus
 }

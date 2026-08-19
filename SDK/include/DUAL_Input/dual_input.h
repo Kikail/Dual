@@ -13,8 +13,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "dual_core.h"
-#include "dual_math.h"
+#include "../DUAL_Core/dual_core.h"
+#include "../DUAL_Math/dual_math.h"
 
 #ifdef __cplusplus
 extern "C" {

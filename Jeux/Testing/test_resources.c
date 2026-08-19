@@ -4,8 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "dual_core.h"
-#include "dual_resources.h"
+#include "../../SDK/include/DUAL_Core/dual_core.h"
+#include "../../SDK/include/DUAL_Resources/dual_resources.h"
 #include "dual_utils.h"
 
 typedef struct Stats {

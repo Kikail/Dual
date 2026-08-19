@@ -1,9 +1,10 @@
-#include "dual_core.h"
+#include "../../include/DUAL_Core/dual_core.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
 
-#include "dual_math.h"
+#include "../../include/DUAL_Math/dual_math.h"
 
 /* ============================================================================
  * Définition de la structure opaque (Invisible pour le dev final)
@@ -269,3 +270,35 @@ void DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int3
         if (out_h) *out_h = app->hauteur_ecran;
     }
 }
+
+/* ============================================================================
+ *  Utility
+ * ========================================================================== */
+
+DUAL_Result DUAL_LoadFile(const char* filename, char* buffer, size_t buffer_size) {
+    if (!buffer || !filename || buffer_size == 0) return DUAL_ERROR_INVALID_ARG;
+
+    memset(buffer, 0, buffer_size);
+
+    FILE* fileptr = fopen(filename, "rb"); // Mode binaire 'rb' indispensable
+    if (!fileptr) return DUAL_ERROR_NOT_FOUND;
+
+    size_t bytes_read = fread(buffer, 1, buffer_size - 1, fileptr);
+    buffer[bytes_read] = '\0'; // Garantit la fin de chaîne
+
+    fclose(fileptr);
+    return DUAL_OK;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

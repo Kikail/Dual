@@ -15,8 +15,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "dual_core.h"
-#include "dual_resources.h"
+#include "../DUAL_Core/dual_core.h"
+#include "../DUAL_Resources/dual_resources.h"
 
 #ifdef __cplusplus
 extern "C" {

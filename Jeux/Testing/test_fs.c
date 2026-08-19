@@ -4,8 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "dual_core.h"
-#include "dual_fs.h"
+#include "../../SDK/include/DUAL_Core/dual_core.h"
+#include "../../SDK/include/DUAL_FS/dual_fs.h"
 #include "dual_utils.h"
 
 typedef struct Sauvegarde {

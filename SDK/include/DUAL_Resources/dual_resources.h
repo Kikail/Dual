@@ -19,7 +19,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "dual_core.h"
+#include "../DUAL_Core/dual_core.h"
 
 #ifdef __cplusplus
 extern "C" {

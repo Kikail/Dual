@@ -2,8 +2,8 @@
 #define MA_ENABLE_OPUS
 #include "miniaudio.h"
 
-#include "dual_audio.h"
-#include "dual_resources.h"
+#include "../../include/DUAL_Audio/dual_audio.h"
+#include "../../include/DUAL_Resources/dual_resources.h"
 
 #include <stdlib.h>
 #include <string.h>

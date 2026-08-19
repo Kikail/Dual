@@ -4,8 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "dual_core.h"
-#include "dual_math.h"
+#include "../../SDK/include/DUAL_Core/dual_core.h"
+#include "../../SDK/include/DUAL_Math/dual_math.h"
 #include "dual_utils.h"
 
 #define DEBUG_VEC2(v) printf(#v);\

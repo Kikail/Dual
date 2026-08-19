@@ -1,4 +1,4 @@
-#include "dual_math.h"
+#include "../../include/DUAL_Math/dual_math.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>

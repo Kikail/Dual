@@ -7,14 +7,14 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "dual_audio.h"
-#include "dual_core.h"
-#include "dual_fs.h"
-#include "dual_math.h"
-#include "dual_graphics_2d.h"
-#include "dual_graphics_3d.h"
-#include "dual_resources.h"
-#include "dual_input.h"
+#include "../../SDK/include/DUAL_Audio/dual_audio.h"
+#include "../../SDK/include/DUAL_Core/dual_core.h"
+#include "../../SDK/include/DUAL_FS/dual_fs.h"
+#include "../../SDK/include/DUAL_Math/dual_math.h"
+#include "../../SDK/include/DUAL_Graphics/dual_graphics_2d.h"
+#include "../../SDK/include/DUAL_Graphics/dual_graphics_3d.h"
+#include "../../SDK/include/DUAL_Resources/dual_resources.h"
+#include "../../SDK/include/DUAL_Input/dual_input.h"
 
 static DUAL_Texture* bird_down = NULL;
 static DUAL_Texture* bird_up = NULL;

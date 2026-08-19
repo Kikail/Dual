@@ -13,39 +13,49 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(box3d)
 
+# =====================================================
+# RESOURCES PATH
+# =====================================================
+add_compile_definitions(EXTERNAL_RESOURCES_PATH="${CMAKE_SOURCE_DIR}/Jeux/resources")
+
+add_compile_definitions(INTERNAL_RESOURCES_PATH="${CMAKE_SOURCE_DIR}/SDK/internal_resources")
+add_compile_definitions(INTERNAL_RESOURCES_SHADERS_PATH="${CMAKE_SOURCE_DIR}/SDK/internal_resources/shaders")
+
 # ========================================================================
 # 1. CONFIGURATION DU MOTEUR (L'exécutable principal)
 # ========================================================================
 
 # Liste des fichiers sources du moteur uniquement
 set(MOTEUR_SOURCES
-        SDK/src/dual_core.c
+        SDK/src/DUAL_Core/dual_core.c
         SDK/thirdparty/glad/glad.c
         Jeux/Testing/main.c
         SDK/include/dual_internal.h
-        SDK/src/dual_input.c
-        SDK/src/dual_math.c
-        SDK/src/dual_graphics_2d.c
-        SDK/src/dual_graphics_3d.c
-        SDK/src/dual_resources.c
-        SDK/src/dual_audio.c
-        SDK/src/dual_fs.c
+        SDK/src/DUAL_Input/dual_input.c
+        SDK/src/DUAL_Math/dual_math.c
+        SDK/src/DUAL_Graphics/dual_graphics_2d.c
+        SDK/src/DUAL_Graphics/dual_graphics_3d.c
+        SDK/src/DUAL_Resources/dual_resources.c
+        SDK/src/DUAL_Audio/dual_audio.c
+        SDK/src/DUAL_FS/dual_fs.c
         SDK/include/game_api.h
         SDK/include/dual_utils.h
 )
 
 # Sources du SDK partagées entre le moteur et les tests (sans aucun main.c)
 set(SDK_SOURCES
-        SDK/src/dual_core.c
+        SDK/src/DUAL_Core/dual_core.c
         SDK/thirdparty/glad/glad.c
         SDK/include/dual_internal.h
-        SDK/src/dual_input.c
-        SDK/src/dual_math.c
-        SDK/src/dual_graphics_2d.c
-        SDK/src/dual_graphics_3d.c
-        SDK/src/dual_resources.c
-        SDK/src/dual_audio.c
-        SDK/src/dual_fs.c
+        SDK/src/DUAL_Input/dual_input.c
+        SDK/src/DUAL_Math/dual_math.c
+        SDK/src/DUAL_Graphics/dual_graphics_2d.c
+        SDK/src/DUAL_Graphics/dual_graphics_3d.c
+        SDK/src/DUAL_Graphics/camera.c
+        SDK/src/DUAL_Graphics/shader.c
+        SDK/src/DUAL_Resources/dual_resources.c
+        SDK/src/DUAL_Audio/dual_audio.c
+        SDK/src/DUAL_FS/dual_fs.c
         SDK/include/game_api.h
         SDK/include/dual_utils.h
 )

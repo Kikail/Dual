@@ -1,4 +1,4 @@
-#include "dual_input.h"
+#include "../../include/DUAL_Input/dual_input.h"
 #include <GLFW/glfw3.h>
 #include <stdlib.h>
 #include <math.h>

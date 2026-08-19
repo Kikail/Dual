@@ -4,7 +4,7 @@
 #include <string.h>
 #include <float.h>
 #include <math.h>
-#include <stdint.h> /* Ajout pour int8_t */
+#include <stdint.h>
 
 #include <glad/glad.h>
 
@@ -13,11 +13,14 @@
 #include <assimp/postprocess.h>
 
 /* Inclusion de nos modules */
-#include "dual_graphics_3d.h"
-#include "dual_graphics_2d.h"
-#include "dual_math.h"
-#include "dual_core.h"
-#include "dual_resources.h"
+#include "../../include/DUAL_Graphics/dual_graphics_3d.h"
+#include "../../include/DUAL_Graphics/dual_graphics_2d.h"
+#include "../../include/DUAL_Graphics/shader.h"
+#include "../../include/DUAL_Math/dual_math.h"
+#include "../../include/DUAL_Core/dual_core.h"
+#include "../../include/DUAL_Resources/dual_resources.h"
+#include "../../include/dual_utils.h"
+#include "../../include/DUAL_Graphics/camera.h"
 
 extern void   DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h);
 extern GLuint DUAL_Internal_GetTextureID(const DUAL_Texture* texture);
@@ -58,49 +61,36 @@ struct DUAL_Model {
 
 struct DUAL_Material {
     DUAL_Texture* texture_diffuse;
-    float         brillance;
     DUAL_ResourceHandle* handle;
 };
 
-/* --- OPTIMISATION : Cache des Uniforms --- */
-typedef struct {
-    GLuint program;
-    GLint  uModel;
-    GLint  uMaterial_shininess;
-    GLint  uAmbientLight;
-    GLint  uViewPos;
-    struct {
-        GLint type, position, direction, color, intensity, range;
-    } lights[DUAL_MAX_LIGHTS_3D];
-} DUAL_ShaderState;
+struct Internal_Shaders_s {
+    DUAL_Shader shader_lit;
+    DUAL_Shader shader_unlit;
+    DUAL_Shader shader_skeleton;
+    DUAL_Shader shader_skeleton_unlit;
+    DUAL_Shader shader_debug;
+};
 
 struct DUAL_Renderer3D {
     DUAL_App* app;
 
-    /* Shaders & Caches */
-    DUAL_ShaderState current_shader;
-    DUAL_ShaderState shader_lit;
-    DUAL_ShaderState shader_unlit;
-    DUAL_ShaderState shader_skeleton;
-    DUAL_ShaderState shader_skeleton_unlit;
-    DUAL_ShaderState shader_custom;
+    // On creer une configuration de shaders de base dans le renderer
+    DUAL_Shader current_shader;
+    struct Internal_Shaders_s shaders;
 
-    // On reserve un emplacement supplementaire pour les shaders perso
-    DUAL_ShaderState* active_shaders[5];
-
-    /* UBOs pour GLES 3.1 */
-    GLuint ubo_camera; /* Binding 0: uProjection, uView */
-    GLuint ubo_bones;  /* Binding 1: finalBonesMatrices */
+    GLuint ubo_bones;
 
     /* État de rendu */
     DUAL_RenderMode3D render_mode;
 
     /* Caméra */
-    DUAL_Mat4 view;
-    DUAL_Vec3 camera_position;
+    DUAL_Camera camera;
 
     /* Projection */
     DUAL_ProjectionMode3D projection_mode;
+    DUAL_Mat4 perspective_projection;
+    DUAL_Mat4 orthographic_projection;
     float fov_radians;
     float ortho_demi_hauteur;
     float plan_proche;
@@ -112,6 +102,9 @@ struct DUAL_Renderer3D {
     /* Éclairage */
     DUAL_Vec3  ambient_light;
     DUAL_Light lights[DUAL_MAX_LIGHTS_3D];
+
+    /* Debug Gizmos */
+    DUAL_DebugRenderer3D debug_renderer;
 };
 
 /* --- OPTIMISATION : Réduction de la taille des vertices --- */
@@ -119,8 +112,8 @@ typedef struct {
     DUAL_Vec3 position;
     DUAL_Vec3 normale;
     DUAL_Vec2 tex_coords;
-    float  m_Weights[MAX_BONE_INFLUENCE];
-    int8_t m_BoneIDs[MAX_BONE_INFLUENCE]; /* Passage en 8 bits (gain 12 octets/vertex) */
+    float   m_Weights[MAX_BONE_INFLUENCE];
+    int32_t m_BoneIDs[MAX_BONE_INFLUENCE]; // Utiliser int32_t pour un ivec4 parfait
 } Vertex3D;
 
 /* ============================================================================
@@ -137,7 +130,7 @@ static void SetVertexBoneDataToDefault(Vertex3D* vertex) {
 static void SetVertexBoneData(Vertex3D* vertex, int boneID, float weight) {
     for (unsigned int i = 0; i < MAX_BONE_INFLUENCE; i++) {
         if (vertex->m_BoneIDs[i] < 0) {
-            vertex->m_BoneIDs[i] = (int8_t)boneID; /* Cast sécurisé car MAX_BONES=100 */
+            vertex->m_BoneIDs[i] = boneID;
             vertex->m_Weights[i] = weight;
             break;
         }
@@ -394,162 +387,6 @@ void Animator_UpdateAnimation(Animator* animator, float dt) {
     }
 }
 
-/* ============================================================================
- * SHADERS 3D GLES 3.1 AVEC UBOs
- * ========================================================================== */
-
-static const char* vertex_shader_unlit_src =
-    "#version 310 es\n"
-    "precision highp float;\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "layout (location = 1) in vec3 aNormal;\n"
-    "layout (location = 2) in vec2 aTexCoord;\n"
-    "out vec2 TexCoord;\n"
-    "layout (std140, binding = 0) uniform CameraBlock {\n"
-    "   mat4 uProjection;\n"
-    "   mat4 uView;\n"
-    "};\n"
-    "uniform mat4 uModel;\n"
-    "void main() {\n"
-    "   gl_Position = uProjection * uView * uModel * vec4(aPos, 1.0);\n"
-    "   TexCoord = aTexCoord;\n"
-    "}\n";
-
-static const char* fragment_shader_unlit_src =
-    "#version 310 es\n"
-    "precision mediump float;\n"
-    "in vec2 TexCoord;\n"
-    "out vec4 FragColor;\n"
-    "uniform sampler2D uTexture;\n"
-    "void main() {\n"
-    "   FragColor = texture(uTexture, TexCoord);\n"
-    "}\n";
-
-static const char* vertex_shader_lit_src =
-    "#version 310 es\n"
-    "precision highp float;\n"
-    "layout (location = 0) in vec3 aPos;\n"
-    "layout (location = 1) in vec3 aNormal;\n"
-    "layout (location = 2) in vec2 aTexCoord;\n"
-    "out vec3 FragPos;\n"
-    "out vec3 Normal;\n"
-    "out vec2 TexCoord;\n"
-    "layout (std140, binding = 0) uniform CameraBlock {\n"
-    "   mat4 uProjection;\n"
-    "   mat4 uView;\n"
-    "};\n"
-    "uniform mat4 uModel;\n"
-    "void main() {\n"
-    "   FragPos = vec3(uModel * vec4(aPos, 1.0));\n"
-    "   Normal = mat3(transpose(inverse(uModel))) * aNormal;\n"
-    "   TexCoord = aTexCoord;\n"
-    "   gl_Position = uProjection * uView * vec4(FragPos, 1.0);\n"
-    "}\n";
-
-static const char* vertex_shader_skeleton_lit_src =
-    "#version 310 es\n"
-    "precision highp float;\n"
-    "layout(location = 0) in vec3 aPos;\n"
-    "layout(location = 1) in vec3 aNormal;\n"
-    "layout(location = 2) in vec2 aTexCoord;\n"
-    "layout(location = 3) in vec4 aWeights;\n"
-    "layout(location = 4) in ivec4 aBoneIds;\n" /* Transmis depuis GL_BYTE */
-    "layout (std140, binding = 0) uniform CameraBlock {\n"
-    "   mat4 uProjection;\n"
-    "   mat4 uView;\n"
-    "};\n"
-    "layout (std140, binding = 1) uniform BonesBlock {\n"
-    "   mat4 finalBonesMatrices[100];\n"
-    "};\n"
-    "uniform mat4 uModel;\n"
-    "out vec3 FragPos;\n"
-    "out vec3 Normal;\n"
-    "out vec2 TexCoord;\n"
-    "void main()\n"
-    "{\n"
-    "    vec4 totalPosition = vec4(0.0);\n"
-    "    vec3 totalNormal = vec3(0.0);\n"
-    "    int bonesApplied = 0;\n"
-    "    for(int i = 0 ; i < 4 ; i++)\n"
-    "    {\n"
-    "        if(aBoneIds[i] == -1)\n"
-    "            continue;\n"
-    "        if(aBoneIds[i] >= 100)\n"
-    "        {\n"
-    "            totalPosition = vec4(aPos, 1.0);\n"
-    "            totalNormal = aNormal;\n"
-    "            bonesApplied++;\n"
-    "            break;\n"
-    "        }\n"
-    "        vec4 localPosition = finalBonesMatrices[aBoneIds[i]] * vec4(aPos, 1.0);\n"
-    "        totalPosition += localPosition * aWeights[i];\n"
-    "        vec3 localNormal = mat3(finalBonesMatrices[aBoneIds[i]]) * aNormal;\n"
-    "        totalNormal += localNormal * aWeights[i];\n"
-    "        bonesApplied++;\n"
-    "    }\n"
-    "    if (bonesApplied == 0 || totalPosition.w == 0.0) {\n"
-    "        totalPosition = vec4(aPos, 1.0);\n"
-    "        totalNormal = aNormal;\n"
-    "    }\n"
-    "    FragPos = vec3(uModel * totalPosition);\n"
-    "    Normal = mat3(transpose(inverse(uModel))) * totalNormal;\n"
-    "    TexCoord = aTexCoord;\n"
-    "    gl_Position = uProjection * uView * vec4(FragPos, 1.0);\n"
-    "}\n";
-
-static const char* fragment_shader_lit_src =
-    "#version 310 es\n"
-    "precision mediump float;\n"
-    "in vec3 FragPos;\n"
-    "in vec3 Normal;\n"
-    "in vec2 TexCoord;\n"
-    "out vec4 FragColor;\n"
-    "struct Material {\n"
-    "    sampler2D texture_diffuse;\n"
-    "    float shininess;\n"
-    "};\n"
-    "struct Light {\n"
-    "    int type;\n"
-    "    vec3 position;\n"
-    "    vec3 direction;\n"
-    "    vec3 color;\n"
-    "    float intensity;\n"
-    "    float range;\n"
-    "};\n"
-    "#define MAX_LIGHTS 4\n"
-    "uniform Material uMaterial;\n"
-    "uniform Light uLights[MAX_LIGHTS];\n"
-    "uniform vec3 uAmbientLight;\n"
-    "uniform vec3 uViewPos;\n"
-    "void main() {\n"
-    "   vec4 texColor = texture(uMaterial.texture_diffuse, TexCoord);\n"
-    "   vec3 ambient = uAmbientLight * texColor.rgb;\n"
-    "   vec3 norm = normalize(Normal);\n"
-    "   vec3 viewDir = normalize(uViewPos - FragPos);\n"
-    "   vec3 diffuseAccum = vec3(0.0);\n"
-    "   for (int i = 0; i < MAX_LIGHTS; ++i) {\n"
-    "       if (uLights[i].intensity <= 0.0) continue;\n"
-    "       vec3 lightDir;\n"
-    "       float attenuation = 1.0;\n"
-    "       if (uLights[i].type == 0) {\n"
-    "           lightDir = normalize(-uLights[i].direction);\n"
-    "       } else {\n"
-    "           vec3 lightVec = uLights[i].position - FragPos;\n"
-    "           float distance = length(lightVec);\n"
-    "           lightDir = normalize(lightVec);\n"
-    "           if (uLights[i].range > 0.0) {\n"
-    "               float ratio = distance / uLights[i].range;\n"
-    "               attenuation = 1.0 / (1.0 + 2.0 * ratio + ratio * ratio);\n"
-    "               if (distance > uLights[i].range) attenuation = 0.0;\n"
-    "           }\n"
-    "       }\n"
-    "       float diff = max(dot(norm, lightDir), 0.0);\n"
-    "       diffuseAccum += uLights[i].color * uLights[i].intensity * diff * texColor.rgb * attenuation;\n"
-    "   }\n"
-    "   vec3 result = ambient + diffuseAccum;\n"
-    "   FragColor = vec4(result, texColor.a);\n"
-    "}\n";
-
 static GLuint CompileShader3D(GLenum type, const char* source, DUAL_Result* out_result) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, NULL);
@@ -580,7 +417,7 @@ static void ApplyCullMode3D(DUAL_CullMode mode) {
 DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials) {
     if (!chemin_fichier || !out_model) return DUAL_ERROR_INVALID_ARG;
 
-    const unsigned int flags_assimp = aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_GenSmoothNormals | aiProcess_FlipUVs;
+    const unsigned int flags_assimp = aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_PreTransformVertices;
     const struct aiScene* scene = aiImportFile(chemin_fichier, flags_assimp);
 
     if (!scene || !scene->mRootNode || (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)) {
@@ -661,6 +498,14 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
             if (pos.x < bb_min.x) bb_min.x = pos.x; if (pos.x > bb_max.x) bb_max.x = pos.x;
             if (pos.y < bb_min.y) bb_min.y = pos.y; if (pos.y > bb_max.y) bb_max.y = pos.y;
             if (pos.z < bb_min.z) bb_min.z = pos.z; if (pos.z > bb_max.z) bb_max.z = pos.z;
+
+            float total_w = vertices[v].m_Weights[0] + vertices[v].m_Weights[1] + vertices[v].m_Weights[2] + vertices[v].m_Weights[3];
+            if (total_w > 0.0f) {
+                vertices[v].m_Weights[0] /= total_w;
+                vertices[v].m_Weights[1] /= total_w;
+                vertices[v].m_Weights[2] /= total_w;
+                vertices[v].m_Weights[3] /= total_w;
+            }
         }
 
         uint32_t index_cursor = 0;
@@ -691,9 +536,8 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, normale)); glEnableVertexAttribArray(1);
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, tex_coords)); glEnableVertexAttribArray(2);
 
-        /* OPTIMISATION: weights en premier, BoneIDs passe en GL_BYTE */
         glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_Weights)); glEnableVertexAttribArray(3);
-        glVertexAttribIPointer(4, 4, GL_BYTE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_BoneIDs)); glEnableVertexAttribArray(4);
+        glVertexAttribIPointer(4, 4, GL_INT, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_BoneIDs));glEnableVertexAttribArray(4);
 
         glBindVertexArray(0);
 
@@ -750,7 +594,6 @@ DUAL_Result DUAL_Material_Create(DUAL_ResourceManager* resources, DUAL_Texture* 
     DUAL_Material* mat = malloc(sizeof(struct DUAL_Material));
     if (!mat) return DUAL_ERROR_OUT_OF_MEMORY;
     mat->texture_diffuse = texture_diffuse;
-    mat->brillance = 32.0f;
     mat->handle = NULL;
     *out_material = mat;
     return DUAL_OK;
@@ -761,98 +604,56 @@ void DUAL_Material_Destroy(DUAL_ResourceManager* resources, DUAL_Material* mater
     if (material) free(material);
 }
 
-void DUAL_Material_SetShininess(DUAL_Material* material, float brillance) {
-    if (material) material->brillance = brillance;
-}
-
-/* ============================================================================
- * RENDERER 3D : OPTIMISATIONS DES UNIFORMS ET UBO
- * ========================================================================== */
-
-static void CacheShaderUniforms(DUAL_ShaderState* state, bool is_lit) {
-    state->uModel = glGetUniformLocation(state->program, "uModel");
-
-    if (is_lit) {
-        state->uMaterial_shininess = glGetUniformLocation(state->program, "uMaterial.shininess");
-        state->uAmbientLight = glGetUniformLocation(state->program, "uAmbientLight");
-        state->uViewPos = glGetUniformLocation(state->program, "uViewPos");
-
-        char uname[64];
-        for (int i = 0; i < DUAL_MAX_LIGHTS_3D; i++) {
-            sprintf(uname, "uLights[%d].type", i);      state->lights[i].type = glGetUniformLocation(state->program, uname);
-            sprintf(uname, "uLights[%d].position", i);  state->lights[i].position = glGetUniformLocation(state->program, uname);
-            sprintf(uname, "uLights[%d].direction", i); state->lights[i].direction = glGetUniformLocation(state->program, uname);
-            sprintf(uname, "uLights[%d].color", i);     state->lights[i].color = glGetUniformLocation(state->program, uname);
-            sprintf(uname, "uLights[%d].intensity", i); state->lights[i].intensity = glGetUniformLocation(state->program, uname);
-            sprintf(uname, "uLights[%d].range", i);     state->lights[i].range = glGetUniformLocation(state->program, uname);
-        }
-    }
-}
-
 DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer) {
     if (!app || !out_renderer) return DUAL_ERROR_INVALID_ARG;
     DUAL_Renderer3D* renderer = malloc(sizeof(struct DUAL_Renderer3D));
     memset(renderer, 0, sizeof(struct DUAL_Renderer3D));
     renderer->app = app;
 
-    /* Compilation des shaders */
-    GLuint vs_lit = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_lit_src, NULL);
-    GLuint fs_lit = CompileShader3D(GL_FRAGMENT_SHADER, fragment_shader_lit_src, NULL);
-    renderer->shader_lit.program = glCreateProgram();
-    glAttachShader(renderer->shader_lit.program, vs_lit); glAttachShader(renderer->shader_lit.program, fs_lit); glLinkProgram(renderer->shader_lit.program);
+    bool compilation_result = true;
+    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_lit, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_lit_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_lit_base.fs", DUAL_SHADER_LIT);
+    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_unlit, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_unlit_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_unlit_base.fs", DUAL_SHADER_UNLIT);
+    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_skeleton, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_skeletal_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_lit_base.fs", DUAL_SHADER_LIT);
+    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_skeleton_unlit, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_skeletal_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_unlit_base.fs", DUAL_SHADER_UNLIT);
+    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_debug, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_debug_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_debug_base.fs", DUAL_SHADER_UNLIT);
 
-    GLuint vs_unlit = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_unlit_src, NULL);
-    GLuint fs_unlit = CompileShader3D(GL_FRAGMENT_SHADER, fragment_shader_unlit_src, NULL);
-    renderer->shader_unlit.program = glCreateProgram();
-    glAttachShader(renderer->shader_unlit.program, vs_unlit); glAttachShader(renderer->shader_unlit.program, fs_unlit); glLinkProgram(renderer->shader_unlit.program);
-
-    GLuint vs_skel = CompileShader3D(GL_VERTEX_SHADER, vertex_shader_skeleton_lit_src, NULL);
-    renderer->shader_skeleton.program = glCreateProgram();
-    glAttachShader(renderer->shader_skeleton.program, vs_skel); glAttachShader(renderer->shader_skeleton.program, fs_lit); glLinkProgram(renderer->shader_skeleton.program);
-    renderer->shader_custom.program = renderer->shader_skeleton.program;
-
-    renderer->shader_skeleton_unlit.program = glCreateProgram();
-    glAttachShader(renderer->shader_skeleton_unlit.program, vs_skel); glAttachShader(renderer->shader_skeleton_unlit.program, fs_unlit); glLinkProgram(renderer->shader_skeleton_unlit.program);
-
-    glDeleteShader(vs_lit); glDeleteShader(fs_lit); glDeleteShader(vs_unlit); glDeleteShader(fs_unlit); glDeleteShader(vs_skel);
-
-    /* --- OPTIMISATION : Mise en cache --- */
-    CacheShaderUniforms(&renderer->shader_lit, true);
-    CacheShaderUniforms(&renderer->shader_unlit, false);
-    CacheShaderUniforms(&renderer->shader_skeleton, true);
-    CacheShaderUniforms(&renderer->shader_skeleton_unlit, false);
-    CacheShaderUniforms(&renderer->shader_custom, true);
-
-    renderer->active_shaders[0] = &renderer->shader_lit;
-    renderer->active_shaders[1] = &renderer->shader_unlit;
-    renderer->active_shaders[2] = &renderer->shader_skeleton;
-    renderer->active_shaders[3] = &renderer->shader_skeleton_unlit;
-    renderer->active_shaders[4] = &renderer->shader_custom;
-
-    renderer->current_shader = renderer->shader_skeleton;
-
-    /* --- OPTIMISATION : Création des UBOs --- */
-    glGenBuffers(1, &renderer->ubo_camera);
-    glBindBuffer(GL_UNIFORM_BUFFER, renderer->ubo_camera);
-    glBufferData(GL_UNIFORM_BUFFER, 2 * sizeof(DUAL_Mat4), NULL, GL_DYNAMIC_DRAW); /* Proj + View */
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, renderer->ubo_camera);
-
-    glGenBuffers(1, &renderer->ubo_bones);
-    glBindBuffer(GL_UNIFORM_BUFFER, renderer->ubo_bones);
-    glBufferData(GL_UNIFORM_BUFFER, MAX_BONES * sizeof(DUAL_Mat4), NULL, GL_DYNAMIC_DRAW);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 1, renderer->ubo_bones);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
-    /* Initialisation par défaut */
     renderer->render_mode = DUAL_RENDER_LIT;
-    renderer->view = DUAL_Mat4_Identity();
-    renderer->camera_position = (DUAL_Vec3){ 0.0f, 0.0f, 0.0f };
+    renderer->camera = DUAL_Camera_Create((DUAL_Vec3){0.0f, 0.0f, 0.0f}, DUAL_VECTOR_UP, DUAL_VECTOR_FRONT, DUAL_CAMERA_YAW, DUAL_CAMERA_PITCH, DUAL_CAMERA_SPEED, DUAL_CAMERA_SENSIVITY, DUAL_CAMERA_ZOOM);
     renderer->projection_mode = DUAL_PROJECTION_PERSPECTIVE;
+
     renderer->fov_radians = 1.0471975512f;
     renderer->ortho_demi_hauteur = 5.0f;
     renderer->plan_proche = 0.1f;
     renderer->plan_lointain = 100.0f;
+
+    int32_t w = 0, h = 0;
+    DUAL_Internal_GetScreenDimensions(renderer->app, &w, &h);
+    float aspect = (h != 0) ? ((float)w / (float)h) : 1.0f;
+    float demi_h = (renderer->ortho_demi_hauteur > 0.0f) ? renderer->ortho_demi_hauteur : 5.0f;
+    float demi_w = demi_h * aspect;
+    renderer->orthographic_projection = DUAL_Mat4_Ortho(-demi_w, demi_w, -demi_h, demi_h, renderer->plan_proche, renderer->plan_lointain);
+    renderer->perspective_projection = DUAL_Mat4_Perspective(renderer->fov_radians, aspect, renderer->plan_proche, renderer->plan_lointain);
+
     renderer->cull_mode = DUAL_CULL_BACK;
+
+
+    renderer->debug_renderer.count = 0;
+    renderer->debug_renderer.capacity = DUAL_DEBUG_MAX_VERTICES;
+
+    glGenVertexArrays(1, &renderer->debug_renderer.vao);
+    glGenBuffers(1, &renderer->debug_renderer.vbo);
+    glBindVertexArray(renderer->debug_renderer.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, renderer->debug_renderer.vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(LineVertex) * DUAL_DEBUG_MAX_VERTICES, NULL, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(LineVertex), (void*)offsetof(LineVertex, position));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(LineVertex), (void*)offsetof(LineVertex, color));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
+
+    DUAL_Renderer3D_UseShader(renderer, SHADER_DEBUG);
+    DUAL_Shader_setVec3(&renderer->current_shader, "uColor", (DUAL_Vec3){1.0f, 1.0f, 1.0f});
+    DUAL_Renderer3D_UseShader(renderer, LIT);
 
     *out_renderer = renderer;
     return DUAL_OK;
@@ -860,23 +661,7 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
 
 void DUAL_Renderer3D_Destroy(DUAL_Renderer3D* renderer) {
     if (!renderer) return;
-    glDeleteProgram(renderer->shader_lit.program);
-    glDeleteProgram(renderer->shader_unlit.program);
-    glDeleteProgram(renderer->shader_skeleton.program);
-    glDeleteProgram(renderer->shader_skeleton_unlit.program);
-    glDeleteBuffers(1, &renderer->ubo_camera);
-    glDeleteBuffers(1, &renderer->ubo_bones);
     free(renderer);
-}
-
-void DUAL_Renderer3D_SetCameraLookAt(DUAL_Renderer3D* renderer, DUAL_Vec3 position, DUAL_Vec3 cible, DUAL_Vec3 haut) {
-    if (!renderer) return;
-    renderer->camera_position = position;
-    renderer->view = DUAL_Mat4_LookAt(position, cible, haut);
-}
-void DUAL_Renderer3D_SetCameraPosition(DUAL_Renderer3D* renderer, DUAL_Vec3 position) {
-    if (!renderer) return;
-    renderer->camera_position = position;
 }
 
 void DUAL_Renderer3D_SetProjection(DUAL_Renderer3D* renderer, float fov_radians, float plan_proche, float plan_lointain) {
@@ -936,43 +721,38 @@ void DUAL_Renderer3D_Begin(DUAL_Renderer3D* renderer) {
 
     DUAL_Mat4 proj;
     if (renderer->projection_mode == DUAL_PROJECTION_ORTHOGRAPHIC) {
-        float demi_h = (renderer->ortho_demi_hauteur > 0.0f) ? renderer->ortho_demi_hauteur : 5.0f;
-        float demi_w = demi_h * aspect;
-        proj = DUAL_Mat4_Ortho(-demi_w, demi_w, -demi_h, demi_h, renderer->plan_proche, renderer->plan_lointain);
+        proj = renderer->orthographic_projection;
     } else {
-        proj = DUAL_Mat4_Perspective(renderer->fov_radians, aspect, renderer->plan_proche, renderer->plan_lointain);
-    }
-
-    /* --- OPTIMISATION : Mise à jour unique via UBO --- */
-    DUAL_Mat4 camera_matrices[2] = { proj, renderer->view };
-    glBindBuffer(GL_UNIFORM_BUFFER, renderer->ubo_camera);
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, 2 * sizeof(DUAL_Mat4), camera_matrices);
-    glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
-    /* --- OPTIMISATION : Lumières via Uniforms cachés --- */
-    for (int s = 0; s < 5; s++) {
-        DUAL_ShaderState* state = renderer->active_shaders[s];
-
-        if (state == &renderer->shader_lit || state == &renderer->shader_skeleton || state == &renderer->shader_custom) {
-            glUseProgram(state->program);
-            glUniform3f(state->uAmbientLight, renderer->ambient_light.x, renderer->ambient_light.y, renderer->ambient_light.z);
-            glUniform3f(state->uViewPos, renderer->camera_position.x, renderer->camera_position.y, renderer->camera_position.z);
-
-            for (int i = 0; i < DUAL_MAX_LIGHTS_3D; i++) {
-                DUAL_Light* l = &renderer->lights[i];
-                glUniform1i(state->lights[i].type, l->type);
-                glUniform3f(state->lights[i].position, l->position.x, l->position.y, l->position.z);
-                glUniform3f(state->lights[i].direction, l->direction.x, l->direction.y, l->direction.z);
-                glUniform3f(state->lights[i].color, l->couleur.x, l->couleur.y, l->couleur.z);
-                glUniform1f(state->lights[i].intensity, l->intensite);
-                glUniform1f(state->lights[i].range, l->portee);
-            }
-        }
+        proj = renderer->perspective_projection;
     }
 }
 
 void DUAL_Renderer3D_End(DUAL_Renderer3D* renderer) {
-    (void)renderer;
+    if (!renderer) return;
+
+    if (renderer->debug_renderer.count > 0) {
+        glBindBuffer(GL_ARRAY_BUFFER, renderer->debug_renderer.vbo);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(LineVertex) * renderer->debug_renderer.count, renderer->debug_renderer.vertices);
+
+        DUAL_Shader previous_shader = renderer->current_shader;
+
+        DUAL_Renderer3D_UseShader(renderer, SHADER_DEBUG);
+        DUAL_Shader_use(&renderer->current_shader);
+
+        DUAL_Shader_setMat4(&renderer->current_shader, "uModel", DUAL_Mat4_Identity());
+        DUAL_Shader_setMat4(&renderer->current_shader, "uView", DUAL_Camera_GetViewMatrix(&renderer->camera));
+        DUAL_Shader_setMat4(&renderer->current_shader, "uProjection", renderer->perspective_projection);
+
+        glBindVertexArray(renderer->debug_renderer.vao);
+        glDrawArrays(GL_LINES, 0, (GLsizei)renderer->debug_renderer.count);
+        glBindVertexArray(0);
+
+        renderer->current_shader = previous_shader;
+        DUAL_Shader_use(&renderer->current_shader);
+
+        renderer->debug_renderer.count = 0;
+    }
+
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
@@ -985,17 +765,7 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
 
     if (!materials) materials = (const DUAL_Material**)model->materials;
 
-    DUAL_ShaderState* active_state;
-    /*
-    if (animator) {
-        active_state = (renderer->render_mode == DUAL_RENDER_UNLIT) ? &renderer->shader_skeleton_unlit : &renderer->shader_skeleton;
-    } else {
-        active_state = (renderer->render_mode == DUAL_RENDER_UNLIT) ? &renderer->shader_unlit : &renderer->shader_lit;
-    }
-    */
-    active_state = &renderer->current_shader;
-
-    glUseProgram(active_state->program);
+    DUAL_Shader_use(&renderer->current_shader);
 
     DUAL_Mat4 scale   = DUAL_Mat4_Scale(transform.echelle);
     DUAL_Mat4 rot_x   = DUAL_Mat4_Rotate((DUAL_Vec3){ 1.0f, 0.0f, 0.0f }, transform.rotation_euler_radians.x);
@@ -1004,14 +774,22 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
     DUAL_Mat4 trans   = DUAL_Mat4_Translate(transform.position);
     DUAL_Mat4 modele  = DUAL_Mat4_Multiply(trans, DUAL_Mat4_Multiply(DUAL_Mat4_Multiply(rot_z, DUAL_Mat4_Multiply(rot_y, rot_x)), scale));
 
-    /* --- OPTIMISATION : Plus de glGetUniformLocation ! --- */
-    glUniformMatrix4fv(active_state->uModel, 1, GL_FALSE, modele.m);
+    // On envoit les matrices au shader
+    DUAL_Shader_setMat4(&renderer->current_shader, "uModel", modele);
+    DUAL_Shader_setMat4(&renderer->current_shader, "uView", DUAL_Camera_GetViewMatrix(&renderer->camera));
+    if (renderer->projection_mode == DUAL_PROJECTION_PERSPECTIVE) {
+        DUAL_Shader_setMat4(&renderer->current_shader, "uProjection", renderer->perspective_projection);
+    }
+    else {
+        DUAL_Shader_setMat4(&renderer->current_shader, "uProjection", renderer->orthographic_projection);
+    }
 
-    /* --- OPTIMISATION : Matrice des Os via UBO (1 appel plutôt que 100) --- */
     if (animator) {
-        glBindBuffer(GL_UNIFORM_BUFFER, renderer->ubo_bones);
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, MAX_BONES * sizeof(DUAL_Mat4), animator->m_FinalBoneMatrices);
-        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        DUAL_Shader_setMat4Array(&renderer->current_shader, "uFinalBonesMatrices", MAX_BONES, animator->m_FinalBoneMatrices);
+    }
+
+    if (renderer->current_shader.renderMode == DUAL_SHADER_LIT) {
+        DUAL_Renderer3d_SendLightInfosToShader(renderer, &renderer->current_shader);
     }
 
     for (uint32_t i = 0; i < model->mesh_count; i++) {
@@ -1023,11 +801,9 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
         }
 
         if (material && material->texture_diffuse) {
-            if (active_state->uMaterial_shininess != -1) {
-                glUniform1f(active_state->uMaterial_shininess, material->brillance);
-            }
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, DUAL_Internal_GetTextureID(material->texture_diffuse));
+            glUniform1i(glGetUniformLocation(renderer->current_shader.shaderID, "texture_diffuse"), 0);
         } else {
             glBindTexture(GL_TEXTURE_2D, 0);
         }
@@ -1038,40 +814,160 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
     glBindVertexArray(0);
 }
 
+void DUAL_Renderer3d_SendLightInfosToShader(DUAL_Renderer3D* renderer, DUAL_Shader* shader) {
+    DUAL_Shader_setVec3(shader, "uAmbientLight", renderer->ambient_light);
+    char uname[64];
+    for (int i = 0; i < DUAL_MAX_LIGHTS_3D; i++) {
+        sprintf(uname, "uLights[%d].type", i);      DUAL_Shader_setInt(shader, uname, renderer->lights[i].type);
+        sprintf(uname, "uLights[%d].position", i);  DUAL_Shader_setVec3(shader, uname, renderer->lights[i].position);
+        sprintf(uname, "uLights[%d].direction", i); DUAL_Shader_setVec3(shader, uname, renderer->lights[i].direction);
+        sprintf(uname, "uLights[%d].color", i);     DUAL_Shader_setVec3(shader, uname, renderer->lights[i].couleur);
+        sprintf(uname, "uLights[%d].intensity", i); DUAL_Shader_setFloat(shader, uname, renderer->lights[i].intensite);
+        sprintf(uname, "uLights[%d].range", i);     DUAL_Shader_setFloat(shader, uname, renderer->lights[i].portee);
+    }
+}
+
 void DUAL_DrawModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material** materials, DUAL_Transform3D transform) {
     DUAL_DrawAnimatedModel(renderer, model, materials, transform, NULL);
 }
 
-DUAL_Result DUAL_Renderer3D_LoadShader(DUAL_Renderer3D* renderer, char* vertex_shader, char* fragment_shader, GLuint* out_shader) {
-    DUAL_Result result = DUAL_OK;
+void DUAL_Renderer3D_UseShader(DUAL_Renderer3D* renderer, DUAL_Renderer3d_Shaders shader) {
+    if (!renderer) return;
+    switch (shader) {
+        case LIT:
+            renderer->current_shader = renderer->shaders.shader_lit;
+            break;
+        case UNLIT:
+            renderer->current_shader = renderer->shaders.shader_unlit;
+            break;
+        case SKELETAL_LIT:
+            renderer->current_shader = renderer->shaders.shader_skeleton;
+            break;
+        case SKELETAL_UNLIT:
+            renderer->current_shader = renderer->shaders.shader_skeleton_unlit;
+            break;
+        case SHADER_DEBUG:
+            renderer->current_shader = renderer->shaders.shader_debug;
+            break;
+        default:
+            break;
+    }
+}
+void DUAL_Renderer3D_UseCustomShader(DUAL_Renderer3D* renderer, DUAL_Shader* shader) {
+    if (!renderer || !shader) return;
+    renderer->current_shader = *shader;
+}
+DUAL_Camera* DUAL_Renderer3D_GetCamera(DUAL_Renderer3D* renderer) {
+    return &renderer->camera;
+}
 
-    GLuint vs_lit = CompileShader3D(GL_VERTEX_SHADER, vertex_shader, &result);
-    GLuint fs_lit = CompileShader3D(GL_FRAGMENT_SHADER, fragment_shader, &result);
+void DUAL_Debug_DrawLine(DUAL_Renderer3D* debug, DUAL_Vec3 start, DUAL_Vec3 end, DUAL_Vec3 color) {
+    if (debug->debug_renderer.count + 2 > debug->debug_renderer.capacity) return; // Sécurité realloc
 
-    if (result != DUAL_OK) {
-        return result;
+    debug->debug_renderer.vertices[debug->debug_renderer.count++] = (LineVertex){ start, color };
+    debug->debug_renderer.vertices[debug->debug_renderer.count++] = (LineVertex){ end, color };
+}
+
+void DUAL_Debug_DrawCircle(DUAL_Renderer3D* debug, DUAL_Vec3 center, float radius, int segments, DUAL_Vec3 color) {
+    float step = (2.0f * 3.14159265f) / (float)segments;
+
+    for (int i = 0; i < segments; i++) {
+        float angle1 = i * step;
+        float angle2 = (i + 1) * step;
+
+        // Cercle dans le plan XZ (au sol)
+        DUAL_Vec3 p1 = { center.x + cosf(angle1) * radius, center.y, center.z + sinf(angle1) * radius };
+        DUAL_Vec3 p2 = { center.x + cosf(angle2) * radius, center.y, center.z + sinf(angle2) * radius };
+
+        DUAL_Debug_DrawLine(debug, p1, p2, color);
+    }
+}
+
+void DUAL_Debug_DrawAABB(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Vec3 color) {
+    DUAL_Vec3 min = box.min;
+    DUAL_Vec3 max = box.max;
+
+    // Les 8 coins du cube
+    DUAL_Vec3 c1 = { min.x, min.y, min.z }, c2 = { max.x, min.y, min.z };
+    DUAL_Vec3 c3 = { max.x, min.y, max.z }, c4 = { min.x, min.y, max.z };
+    DUAL_Vec3 c5 = { min.x, max.y, min.z }, c6 = { max.x, max.y, min.z };
+    DUAL_Vec3 c7 = { max.x, max.y, max.z }, c8 = { min.x, max.y, max.z };
+
+    // Bas
+    DUAL_Debug_DrawLine(debug, c1, c2, color); DUAL_Debug_DrawLine(debug, c2, c3, color);
+    DUAL_Debug_DrawLine(debug, c3, c4, color); DUAL_Debug_DrawLine(debug, c4, c1, color);
+    // Haut
+    DUAL_Debug_DrawLine(debug, c5, c6, color); DUAL_Debug_DrawLine(debug, c6, c7, color);
+    DUAL_Debug_DrawLine(debug, c7, c8, color); DUAL_Debug_DrawLine(debug, c8, c5, color);
+    // Piliers
+    DUAL_Debug_DrawLine(debug, c1, c5, color); DUAL_Debug_DrawLine(debug, c2, c6, color);
+    DUAL_Debug_DrawLine(debug, c3, c7, color); DUAL_Debug_DrawLine(debug, c4, c8, color);
+}
+
+void DUAL_Debug_Render(DUAL_Renderer3D* debug, DUAL_Renderer3D* renderer) {
+    if (debug->debug_renderer.count == 0) return;
+
+    glBindBuffer(GL_ARRAY_BUFFER, debug->debug_renderer.vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(LineVertex) * debug->debug_renderer.count, debug->debug_renderer.vertices);
+
+    DUAL_Shader* current_shader = &renderer->current_shader;
+
+    DUAL_Renderer3D_UseShader(renderer, SHADER_DEBUG);
+    DUAL_Shader_use(&renderer->current_shader);
+    DUAL_Shader_setMat4(&renderer->current_shader, "uModel", DUAL_Mat4_Identity());
+    DUAL_Shader_setMat4(&renderer->current_shader, "uView", DUAL_Camera_GetViewMatrix(&renderer->camera));
+    DUAL_Shader_setMat4(&renderer->current_shader, "uProjection", renderer->perspective_projection);
+
+    glBindVertexArray(debug->debug_renderer.vao);
+    glDrawArrays(GL_LINES, 0, debug->debug_renderer.count);
+    glBindVertexArray(0);
+
+    debug->debug_renderer.count = 0;
+
+    DUAL_Renderer3D_UseCustomShader(renderer, current_shader);
+}
+
+DUAL_Vec3 DUAL_Mat4_TransformPoint(DUAL_Mat4 m, DUAL_Vec3 v) {
+    DUAL_Vec3 res;
+    res.x = m.m[0]*v.x + m.m[4]*v.y + m.m[8]*v.z  + m.m[12];
+    res.y = m.m[1]*v.x + m.m[5]*v.y + m.m[9]*v.z  + m.m[13];
+    res.z = m.m[2]*v.x + m.m[6]*v.y + m.m[10]*v.z + m.m[14];
+    return res;
+}
+void DUAL_Debug_Draw_Model_BoundingBox(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Transform3D transform, DUAL_Vec3 color) {
+    DUAL_Mat4 scale   = DUAL_Mat4_Scale(transform.echelle);
+    DUAL_Mat4 rot_x   = DUAL_Mat4_Rotate((DUAL_Vec3){ 1.0f, 0.0f, 0.0f }, transform.rotation_euler_radians.x);
+    DUAL_Mat4 rot_y   = DUAL_Mat4_Rotate((DUAL_Vec3){ 0.0f, 1.0f, 0.0f }, transform.rotation_euler_radians.y);
+    DUAL_Mat4 rot_z   = DUAL_Mat4_Rotate((DUAL_Vec3){ 0.0f, 0.0f, 1.0f }, transform.rotation_euler_radians.z);
+    DUAL_Mat4 trans   = DUAL_Mat4_Translate(transform.position);
+    DUAL_Mat4 modelMat = DUAL_Mat4_Multiply(trans, DUAL_Mat4_Multiply(DUAL_Mat4_Multiply(rot_z, DUAL_Mat4_Multiply(rot_y, rot_x)), scale));
+
+    DUAL_Vec3 min = box.min;
+    DUAL_Vec3 max = box.max;
+    DUAL_Vec3 corners[8] = {
+        { min.x, min.y, min.z }, { max.x, min.y, min.z },
+        { max.x, min.y, max.z }, { min.x, min.y, max.z },
+        { min.x, max.y, min.z }, { max.x, max.y, min.z },
+        { max.x, max.y, max.z }, { min.x, max.y, max.z }
+    };
+
+    for (int i = 0; i < 8; i++) {
+        corners[i] = DUAL_Mat4_TransformPoint(modelMat, corners[i]);
     }
 
-    GLuint shader = glCreateProgram();
-    glAttachShader(shader, vs_lit);
-    glAttachShader(shader, fs_lit);
-    glLinkProgram(shader);
-    glDeleteShader(vs_lit);
-    glDeleteShader(fs_lit);
-
-    renderer->active_shaders[4]->program = shader;
-    CacheShaderUniforms(renderer->active_shaders[4], true);
-
-    *out_shader = shader;
-
-    return DUAL_OK;
-}
-void DUAL_Renderer3D_ResetShader(DUAL_Renderer3D* renderer) {
-    renderer->current_shader = renderer->shader_skeleton;
-}
-
-void DUAL_Renderer3D_UseShader(DUAL_Renderer3D* renderer, GLuint shader) {
-    renderer->shader_custom.program = shader;
-    renderer->current_shader = renderer->shader_custom;
-    CacheShaderUniforms(&renderer->current_shader, true);
+    // (Bas)
+    DUAL_Debug_DrawLine(debug, corners[0], corners[1], color);
+    DUAL_Debug_DrawLine(debug, corners[1], corners[2], color);
+    DUAL_Debug_DrawLine(debug, corners[2], corners[3], color);
+    DUAL_Debug_DrawLine(debug, corners[3], corners[0], color);
+    // (Haut)
+    DUAL_Debug_DrawLine(debug, corners[4], corners[5], color);
+    DUAL_Debug_DrawLine(debug, corners[5], corners[6], color);
+    DUAL_Debug_DrawLine(debug, corners[6], corners[7], color);
+    DUAL_Debug_DrawLine(debug, corners[7], corners[4], color);
+    // (Piliers)
+    DUAL_Debug_DrawLine(debug, corners[0], corners[4], color);
+    DUAL_Debug_DrawLine(debug, corners[1], corners[5], color);
+    DUAL_Debug_DrawLine(debug, corners[2], corners[6], color);
+    DUAL_Debug_DrawLine(debug, corners[3], corners[7], color);
 }

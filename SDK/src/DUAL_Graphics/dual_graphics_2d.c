@@ -5,8 +5,8 @@
 #include <string.h>
 
 /* Inclusion de nos modules */
-#include "dual_graphics_2d.h"
-#include "dual_math.h"
+#include "../../include/DUAL_Graphics/dual_graphics_2d.h"
+#include "../../include/DUAL_Math/dual_math.h"
 
 /* Configuration et inclusion de STB Image */
 #define STB_IMAGE_IMPLEMENTATION

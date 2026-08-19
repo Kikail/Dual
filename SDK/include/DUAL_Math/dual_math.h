@@ -12,6 +12,8 @@
 extern "C" {
 #endif
 
+#define DUAL_RAD(deg) ((deg) * 0.01745329251f)
+
 typedef struct DUAL_Vec2 { float x, y; } DUAL_Vec2;
 typedef struct DUAL_Vec3 { float x, y, z; } DUAL_Vec3;
 typedef struct DUAL_Vec4 { float x, y, z, w; } DUAL_Vec4;

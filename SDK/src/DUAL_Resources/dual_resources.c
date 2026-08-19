@@ -1,4 +1,4 @@
-#include "dual_resources.h"
+#include "../../include/DUAL_Resources/dual_resources.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
