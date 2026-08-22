@@ -26,7 +26,6 @@ bool EstCartoucheInseree(const char* chemin) {
 /*
  *
  * Fonctionnalites a ajouter:
- *  - Shaders perso OK sauf lecture de shader via fichier + il faut fournir des shaders d exemple aux utilisateurs
  *  - Attenuation du son avec la distance 2D ou 3D
  *  - Systeme de particules
  *  - Simples collisions 2D/3D ainsi que des Raycast
@@ -36,6 +35,7 @@ bool EstCartoucheInseree(const char* chemin) {
  *  - Systeme de LOD
  *  - Billboards ( Sprite dans un environnement 3D, regarde toujours la camera )
  *  - Overlay de debug qui affiche les stats CPU et GPU
+ *  - Rendre le systeme de decoupage de fenetre a choix ( ie : VERTICAL, HORIZONTAL, SANS DECOUPAGE(une simple fenetre) )
  *
  *  - Systeme de build de game, construit un fichier contenant toutes les informations
  *  d'un jeu comme son executable et ses ressources. Tout comme un fichier .nds

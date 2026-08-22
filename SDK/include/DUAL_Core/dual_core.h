@@ -76,7 +76,10 @@ typedef struct DUAL_Color {
 typedef enum DUAL_ScreenID {
     DUAL_SCREEN_TOP    = 0, /**< Écran supérieur (généralement utilisé pour le rendu principal). */
     DUAL_SCREEN_BOTTOM = 1, /**< Écran inférieur (généralement tactile, utilisé pour l'UI/HUD). */
-    DUAL_SCREEN_COUNT  = 2  /**< Nombre total d'écrans gérés par la console. */
+    DUAL_SCREEN_RIGHT   = 2, /**< Écran Droit (généralement utilisé pour le rendu principal). */
+    DUAL_SCREEN_LEFT  = 3, /**< Écran Gauche (généralement tactile, utilisé pour l'UI/HUD). */
+    DUAL_SCREEN_MAIN  = 4,
+    DUAL_SCREEN_COUNT  = 5  /**< Nombre total d'écrans gérés par la console. */
 } DUAL_ScreenID;
 
 /**
@@ -101,6 +104,15 @@ typedef enum DUAL_LogLevel {
     DUAL_LOG_ERROR   = 3  /**< Erreur critique nécessitant l'attention du développeur. */
 } DUAL_LogLevel;
 
+/**
+ * @brief Disposition de l'ecran dans dual.
+ */
+typedef enum DUAL_ScreenLayout {
+    DUAL_LAYOUT_HORIZONTAL_SPLIT,
+    DUAL_LAYOUT_VERTICAL_SPLIT,
+    DUAL_LAYOUT_NO_SPLIT
+}DUAL_ScreenLayout;
+
 /* ============================================================================
  *  Structures de configuration
  * ========================================================================== */
@@ -114,12 +126,13 @@ typedef enum DUAL_LogLevel {
  * directement.
  */
 typedef struct DUAL_AppConfig {
-    const char* titre_fenetre;     /**< Titre affiché dans la barre de fenêtre (mode développement desktop). */
-    int32_t     largeur_ecran;     /**< Largeur en pixels de chaque écran logique. */
-    int32_t     hauteur_ecran;     /**< Hauteur en pixels de chaque écran logique. */
-    bool        plein_ecran;       /**< Si vrai, lance la fenêtre en mode plein écran (simulateur desktop). */
-    bool        vsync_actif;       /**< Si vrai, active la synchronisation verticale. */
-    int32_t     fps_cible;         /**< Fréquence d'images par seconde cible (0 = illimité). */
+    const char* titre_fenetre;          /**< Titre affiché dans la barre de fenêtre (mode développement desktop). */
+    int32_t     largeur_ecran;          /**< Largeur en pixels de chaque écran logique. */
+    int32_t     hauteur_ecran;          /**< Hauteur en pixels de chaque écran logique. */
+    DUAL_ScreenLayout screenLayout;     /**< Disposition de l'ecran */
+    bool        plein_ecran;            /**< Si vrai, lance la fenêtre en mode plein écran (simulateur desktop). */
+    bool        vsync_actif;            /**< Si vrai, active la synchronisation verticale. */
+    int32_t     fps_cible;              /**< Fréquence d'images par seconde cible (0 = illimité). */
 } DUAL_AppConfig;
 
 /* ============================================================================
@@ -277,6 +290,7 @@ void DUAL_Log(DUAL_LogLevel niveau, const char* format, ...);
  * ========================================================================== */
 
 DUAL_Result DUAL_LoadFile(const char* filename, char* buffer, size_t buffer_size);
+DUAL_ScreenLayout DUAL_GetScreenLayout(const DUAL_App* app);
 
 #ifdef __cplusplus
 }

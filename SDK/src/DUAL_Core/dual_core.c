@@ -25,8 +25,8 @@ typedef struct DUAL_App {
     int32_t     fps_counter;
     int32_t     fps_current;
 
-    DUAL_Color screenTopClearColor;
-    DUAL_Color screenBottomClearColor;
+    DUAL_ScreenLayout layout;
+    DUAL_Color clear_colors[2]; /* 2 car 2 ecrans max */
 }DUAL_App;
 
 /* ============================================================================
@@ -58,12 +58,21 @@ DUAL_Result DUAL_Init(const DUAL_AppConfig* config, DUAL_App** out_app) {
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
-    /* 3. Calcul de la hauteur de la fenêtre virtuelle (Cumul vertical) */
-    int32_t hauteur_virtuelle = config->hauteur_ecran * 2;
+    int32_t hauteur_virtuelle = config->hauteur_ecran;
+    int32_t largeur_virtuelle = config->largeur_ecran;
+    switch (config->screenLayout) {
+        case DUAL_LAYOUT_HORIZONTAL_SPLIT:
+            hauteur_virtuelle = config->hauteur_ecran * 2;
+            largeur_virtuelle = config->largeur_ecran;
+            break;
+        case DUAL_LAYOUT_VERTICAL_SPLIT:
+            hauteur_virtuelle = config->hauteur_ecran;
+            largeur_virtuelle = config->largeur_ecran * 2;
+            break;
+    }
 
-    /* 4. Création de la fenêtre */
     GLFWmonitor* moniteur = config->plein_ecran ? glfwGetPrimaryMonitor() : NULL;
-    app->window = glfwCreateWindow(config->largeur_ecran, hauteur_virtuelle, config->titre_fenetre, moniteur, NULL);
+    app->window = glfwCreateWindow(largeur_virtuelle, hauteur_virtuelle, config->titre_fenetre, moniteur, NULL);
 
     if (!app->window) {
         DUAL_Log(DUAL_LOG_ERROR, "Impossible de créer la fenêtre virtuelle GLFW.");
@@ -101,14 +110,15 @@ DUAL_Result DUAL_Init(const DUAL_AppConfig* config, DUAL_App** out_app) {
     app->fps_timer      = 0.0;
     app->fps_counter    = 0;
     app->fps_current    = 0;
+    app->layout         = config->screenLayout;
 
     /* Export du pointeur vers l'application du dev */
     *out_app = app;
 
     DUAL_Log(DUAL_LOG_INFO, "Système Dual initialisé avec succès (%dx%d par écran).", app->largeur_ecran, app->hauteur_ecran);
 
-    app->screenTopClearColor = (DUAL_Color){0.1f, 0.6f, 0.2f, 1.0f};
-    app->screenBottomClearColor = (DUAL_Color){0.1f, 0.3f, 0.6f, 1.0f};
+    app->clear_colors[0] = DUAL_COLOR_MAGENTA;
+    app->clear_colors[1] = DUAL_COLOR_BLACK;
 
     return DUAL_OK;
 }
@@ -159,15 +169,29 @@ void DUAL_BeginFrame(DUAL_App* app) {
         app->fps_timer   = 0.0;
     }
 
-    // ─── RENDU ÉCRAN DU HAUT (VERT) ───
-    DUAL_SetActiveScreen(app, DUAL_SCREEN_TOP);
-    glClearColor(app->screenTopClearColor.r, app->screenTopClearColor.g, app->screenTopClearColor.b, app->screenTopClearColor.a); // Vert sapin
-    glClear(GL_COLOR_BUFFER_BIT);
+    switch (app->layout) {
+        case DUAL_LAYOUT_HORIZONTAL_SPLIT:
+            DUAL_SetActiveScreen(app, DUAL_SCREEN_TOP);
+            glClearColor(app->clear_colors[1].r, app->clear_colors[1].g, app->clear_colors[1].b, app->clear_colors[1].a);
+            glClear(GL_COLOR_BUFFER_BIT);
 
-    // ─── RENDU ÉCRAN DU BAS (BLEU) ───
-    DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);
-    glClearColor(app->screenBottomClearColor.r,app->screenBottomClearColor.g,app->screenBottomClearColor.b,app->screenBottomClearColor.a); // Bleu océan
-    glClear(GL_COLOR_BUFFER_BIT);
+            DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);
+            glClearColor(app->clear_colors[0].r,app->clear_colors[0].g,app->clear_colors[0].b,app->clear_colors[0].a);
+            glClear(GL_COLOR_BUFFER_BIT);
+            break;
+        case DUAL_LAYOUT_VERTICAL_SPLIT:
+            DUAL_SetActiveScreen(app, DUAL_SCREEN_RIGHT);
+            glClearColor(app->clear_colors[1].r, app->clear_colors[1].g, app->clear_colors[1].b, app->clear_colors[1].a);
+            glClear(GL_COLOR_BUFFER_BIT);
+
+            DUAL_SetActiveScreen(app, DUAL_SCREEN_LEFT);
+            glClearColor(app->clear_colors[0].r,app->clear_colors[0].g,app->clear_colors[0].b,app->clear_colors[0].a);
+            glClear(GL_COLOR_BUFFER_BIT);
+            break;
+        default:
+            glClearColor(app->clear_colors[1].r,app->clear_colors[1].g,app->clear_colors[1].b,app->clear_colors[1].a);
+            glClear(GL_COLOR_BUFFER_BIT);
+    }
 
     //DUAL_Log(DUAL_LOG_DEBUG, "FPS: %d", app->fps_current);
 }
@@ -175,19 +199,31 @@ void DUAL_BeginFrame(DUAL_App* app) {
 void DUAL_SetActiveScreen(DUAL_App* app, DUAL_ScreenID screen) {
     if (!app) return;
 
-    // 1. On active le mode "Scissor Test" dans OpenGL.
-    // Cela force OpenGL à ne colorer QUE la zone découpée, sinon glClear colorie toute la fenêtre.
-    glEnable(GL_SCISSOR_TEST);
-
-    if (screen == DUAL_SCREEN_TOP) {
-        // Écran du HAUT : la zone commence à Y = hauteur_ecran
-        glViewport(0, app->hauteur_ecran, app->largeur_ecran, app->hauteur_ecran);
-        glScissor(0, app->hauteur_ecran, app->largeur_ecran, app->hauteur_ecran);
-    }
-    else if (screen == DUAL_SCREEN_BOTTOM) {
-        // Écran du BAS : la zone commence à Y = 0
-        glViewport(0, 0, app->largeur_ecran, app->hauteur_ecran);
-        glScissor(0, 0, app->largeur_ecran, app->hauteur_ecran);
+    switch (app->layout) {
+        case DUAL_LAYOUT_HORIZONTAL_SPLIT:
+            glEnable(GL_SCISSOR_TEST);
+            if (screen == DUAL_SCREEN_TOP || screen == DUAL_SCREEN_TOP || screen == DUAL_SCREEN_MAIN) {
+                glViewport(0, app->hauteur_ecran, app->largeur_ecran, app->hauteur_ecran);
+                glScissor(0, app->hauteur_ecran, app->largeur_ecran, app->hauteur_ecran);
+            }
+            else if (screen == DUAL_SCREEN_BOTTOM || screen == DUAL_SCREEN_LEFT) {
+                glViewport(0, 0, app->largeur_ecran, app->hauteur_ecran);
+                glScissor(0, 0, app->largeur_ecran, app->hauteur_ecran);
+            }
+            break;
+        case DUAL_LAYOUT_VERTICAL_SPLIT:
+            glEnable(GL_SCISSOR_TEST);
+            if (screen == DUAL_SCREEN_RIGHT || screen == DUAL_SCREEN_TOP || screen == DUAL_SCREEN_MAIN) {
+                glViewport(app->largeur_ecran, 0, app->largeur_ecran, app->hauteur_ecran);
+                glScissor(app->largeur_ecran, 0, app->largeur_ecran, app->hauteur_ecran);
+            }
+            else if (screen == DUAL_SCREEN_LEFT || screen == DUAL_SCREEN_LEFT) {
+                glViewport(0, 0, app->largeur_ecran, app->hauteur_ecran);
+                glScissor(0, 0, app->largeur_ecran, app->hauteur_ecran);
+            }
+            break;
+        default:
+            break;
     }
 }
 
@@ -200,17 +236,8 @@ void DUAL_EndFrame(DUAL_App* app) {
 
 void DUAL_SetScreenClearColor(DUAL_App* app,DUAL_ScreenID screenId, DUAL_Color clearColor) {
     if (!app) return;
-
-    switch (screenId) {
-        case DUAL_SCREEN_TOP:
-            app->screenTopClearColor = clearColor;
-            break;
-        case DUAL_SCREEN_BOTTOM:
-            app->screenBottomClearColor = clearColor;
-            break;
-        default:
-            break;
-    }
+    if (screenId == DUAL_SCREEN_TOP || screenId == DUAL_SCREEN_RIGHT || screenId == DUAL_SCREEN_MAIN) app->clear_colors[1] = clearColor;
+    else app->clear_colors[0] = clearColor;
 }
 
 /* ============================================================================
@@ -290,7 +317,10 @@ DUAL_Result DUAL_LoadFile(const char* filename, char* buffer, size_t buffer_size
     return DUAL_OK;
 }
 
-
+DUAL_ScreenLayout DUAL_GetScreenLayout(const DUAL_App* app) {
+    if (!app) return DUAL_LAYOUT_HORIZONTAL_SPLIT;
+    return app->layout;
+}
 
 
 

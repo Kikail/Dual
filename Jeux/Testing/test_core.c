@@ -18,14 +18,15 @@ int main() {
         .plein_ecran = false,
         .fps_cible = 60,
         .titre_fenetre = "DUAL Core Testing",
-        .vsync_actif = false
+        .vsync_actif = false,
+        .screenLayout = DUAL_LAYOUT_VERTICAL_SPLIT
     };
     DUAL_Result result = DUAL_Init(&config, &app);
     DEBUG_DUAL_RESULT(result);
 
     // On peut changer la couleur de fond
-    DUAL_SetScreenClearColor(app, DUAL_SCREEN_BOTTOM, DUAL_COLOR_WHITE);
-    DUAL_SetScreenClearColor(app, DUAL_SCREEN_TOP, DUAL_COLOR_BLACK);
+    DUAL_SetScreenClearColor(app, DUAL_SCREEN_RIGHT, DUAL_COLOR_MAGENTA);
+    DUAL_SetScreenClearColor(app, DUAL_SCREEN_LEFT, DUAL_COLOR_WHITE);
 
     // On creer un compteur pour afficher les stats toutes les 10 secondes
     float compteur = 0.0;

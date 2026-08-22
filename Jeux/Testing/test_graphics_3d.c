@@ -32,7 +32,8 @@ int main() {
         .plein_ecran = false,
         .fps_cible = 60,
         .titre_fenetre = "DUAL Core Testing",
-        .vsync_actif = false
+        .vsync_actif = false,
+        .screenLayout = DUAL_LAYOUT_VERTICAL_SPLIT
     };
     DUAL_Result result = DUAL_Init(&config, &app);
     DEBUG_DUAL_RESULT(result);
@@ -100,6 +101,7 @@ int main() {
     DUAL_Renderer3D_UseShader(renderer3D, SHADER3D_LIT);
 
     double oldx = 0, oldy = 0;
+    bool firstMouse = false;
 
     // Boucle du jeu principal
     while (DUAL_ShouldRun(app)) {
@@ -108,11 +110,23 @@ int main() {
         // On actualise les inputs
         DUAL_InputManager_Update(inputManager);
 
-        double x,y;
-        glfwGetCursorPos(DUAL_GetWindow(app), &x, &y);
-        DUAL_Camera3D_ProcessMouseMovement(DUAL_Renderer3D_GetCamera(renderer3D), x-oldx, y-oldy);
-        oldx = x;
-        oldy = y;
+        if (DUAL_IsTouching(inputManager)) {
+            double x,y;
+            glfwGetCursorPos(DUAL_GetWindow(app), &x, &y);
+
+            if (!firstMouse) {
+                oldx = x;
+                oldy = y;
+                firstMouse = true;
+            }
+
+            DUAL_Camera3D_ProcessMouseMovement(DUAL_Renderer3D_GetCamera(renderer3D), x-oldx, y-oldy);
+            oldx = x;
+            oldy = y;
+        }
+        else {
+            firstMouse = false;
+        }
 
         // On change la projection si on appuie sur la touche du haut
         if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_UP)) {
@@ -135,13 +149,13 @@ int main() {
 
 
         // On selectionne l'ecran du bas
-        DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);
+        DUAL_SetActiveScreen(app, DUAL_SCREEN_LEFT);
 
         // On dessine nos images
 
 
         // On selectionne l'ecran du haut
-        DUAL_SetActiveScreen(app, DUAL_SCREEN_TOP);
+        DUAL_SetActiveScreen(app, DUAL_SCREEN_RIGHT);
 
         // On dessine nos images
         DUAL_Renderer3D_Begin(renderer3D);

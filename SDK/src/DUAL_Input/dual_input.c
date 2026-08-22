@@ -14,6 +14,7 @@ struct DUAL_InputManager {
     GLFWwindow* window;             /* Handle de la fenêtre GLFW */
     int32_t     largeur_ecran;       /* Dimensions nominales d'un écran */
     int32_t     hauteur_ecran;
+    DUAL_ScreenLayout layout;
     
     /* Tableaux d'états pour les boutons (Frame courante vs Frame précédente) */
     bool current_buttons[DUAL_BUTTON_COUNT];
@@ -73,6 +74,8 @@ DUAL_Result DUAL_InputManager_Create(DUAL_App* app, DUAL_InputManager** out_inpu
     input->touch_current.position.y = 0.0f;
     input->was_touching_last_frame = false;
 
+    input->layout = DUAL_GetScreenLayout(app);
+
     *out_input = input;
     return DUAL_OK;
 }
@@ -82,7 +85,74 @@ void DUAL_InputManager_Destroy(DUAL_InputManager* input) {
         free(input);
     }
 }
+void Update_Mouse(DUAL_InputManager* input) {
+    if (!input) return;
 
+    double souris_x, souris_y;
+    glfwGetCursorPos(input->window, &souris_x, &souris_y);
+    bool clic_souris = (glfwGetMouseButton(input->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+
+    bool est_dans_ecran_tactile = false;
+    float local_x = 0.0f;
+    float local_y = 0.0f;
+
+    switch (input->layout) {
+        case DUAL_LAYOUT_HORIZONTAL_SPLIT:
+            // Écran du BAS : Y dans GLFW va de hauteur_ecran à (hauteur_ecran * 2)
+            if (souris_x >= 0 && souris_x < input->largeur_ecran &&
+                souris_y >= input->hauteur_ecran && souris_y < (input->hauteur_ecran * 2)) {
+                est_dans_ecran_tactile = true;
+                local_x = (float)souris_x;
+                local_y = (float)(souris_y - input->hauteur_ecran);
+            }
+            break;
+
+        case DUAL_LAYOUT_VERTICAL_SPLIT:
+            // Écran de GAUCHE (ou DROITE selon la logique tactile) : Y va de 0 à hauteur_ecran
+            // Ici configuré pour l'écran de GAUCHE (0 à largeur_ecran)
+            if (souris_x >= 0 && souris_x < input->largeur_ecran &&
+                souris_y >= 0 && souris_y < input->hauteur_ecran) {
+                est_dans_ecran_tactile = true;
+                local_x = (float)souris_x;
+                local_y = (float)souris_y;
+            }
+            break;
+
+        case DUAL_LAYOUT_NO_SPLIT:
+        default:
+            // Écran unique : toute la fenêtre
+            if (souris_x >= 0 && souris_x < input->largeur_ecran &&
+                souris_y >= 0 && souris_y < input->hauteur_ecran) {
+                est_dans_ecran_tactile = true;
+                local_x = (float)souris_x;
+                local_y = (float)souris_y;
+            }
+            break;
+    }
+
+    // Gestion des états du touch
+    if (clic_souris && est_dans_ecran_tactile) {
+        if (!input->was_touching_last_frame) {
+            input->touch_current.phase = DUAL_TOUCH_STARTED;
+        } else {
+            if (local_x != input->touch_current.position.x || local_y != input->touch_current.position.y) {
+                input->touch_current.phase = DUAL_TOUCH_MOVED;
+            } else {
+                input->touch_current.phase = DUAL_TOUCH_HELD;
+            }
+        }
+        input->touch_current.position.x = local_x;
+        input->touch_current.position.y = local_y;
+        input->was_touching_last_frame = true;
+    } else {
+        if (input->was_touching_last_frame) {
+            input->touch_current.phase = DUAL_TOUCH_ENDED;
+            input->was_touching_last_frame = false;
+        } else {
+            input->touch_current.phase = DUAL_TOUCH_NONE;
+        }
+    }
+}
 void DUAL_InputManager_Update(DUAL_InputManager* input) {
     if (!input || !input->window) return;
 
@@ -128,41 +198,7 @@ void DUAL_InputManager_Update(DUAL_InputManager* input) {
         input->joystick_axes.y = stick_y;
     }
 
-    /* 3. MISE À JOUR DE L'ÉCRAN TACTILE (Conversion de la souris PC) */
-    double souris_x, souris_y;
-    glfwGetCursorPos(input->window, &souris_x, &souris_y);
-    bool clic_souris = (glfwGetMouseButton(input->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
-
-    /* Vérification stricte : le clic est-il confiné dans la moitié inférieure de la fenêtre globale ? */
-    bool est_dans_ecran_bas = (souris_x >= 0 && souris_x < input->largeur_ecran &&
-                               souris_y >= input->hauteur_ecran && souris_y < (input->hauteur_ecran * 2));
-
-    if (clic_souris && est_dans_ecran_bas) {
-        /* Traduction en coordonnées locales à l'écran du bas (Y repart de zéro) */
-        float local_x = (float)souris_x;
-        float local_y = (float)(souris_y - input->hauteur_ecran);
-
-        if (!input->was_touching_last_frame) {
-            input->touch_current.phase = DUAL_TOUCH_STARTED;
-        } else {
-            if (local_x != input->touch_current.position.x || local_y != input->touch_current.position.y) {
-                input->touch_current.phase = DUAL_TOUCH_MOVED;
-            } else {
-                input->touch_current.phase = DUAL_TOUCH_HELD;
-            }
-        }
-        input->touch_current.position.x = local_x;
-        input->touch_current.position.y = local_y;
-        input->was_touching_last_frame = true;
-    } else {
-        /* Pas de contact ou sortie de l'écran tactile */
-        if (input->was_touching_last_frame) {
-            input->touch_current.phase = DUAL_TOUCH_ENDED;
-            input->was_touching_last_frame = false;
-        } else {
-            input->touch_current.phase = DUAL_TOUCH_NONE;
-        }
-    }
+    Update_Mouse(input);
 }
 
 /* ============================================================================
