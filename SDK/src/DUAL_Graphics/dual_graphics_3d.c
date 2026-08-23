@@ -70,6 +70,7 @@ struct Internal_Shaders3d_s {
     DUAL_Shader shader_skeleton;
     DUAL_Shader shader_skeleton_unlit;
     DUAL_Shader shader_debug;
+    DUAL_Shader shader_billboard;
 };
 
 struct DUAL_Renderer3D {
@@ -102,6 +103,9 @@ struct DUAL_Renderer3D {
     /* Éclairage */
     DUAL_Vec3  ambient_light;
     DUAL_Light lights[DUAL_MAX_LIGHTS_3D];
+
+    /* Billboard */
+    GLuint billboard_vbo, billboard_vao;
 
     /* Debug Gizmos */
     DUAL_DebugRenderer3D debug_renderer;
@@ -616,6 +620,7 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_skeleton, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_skeletal_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_lit_base.fs", DUAL_SHADER_LIT);
     compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_skeleton_unlit, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_skeletal_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_unlit_base.fs", DUAL_SHADER_UNLIT);
     compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_debug, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_debug_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_debug_base.fs", DUAL_SHADER_UNLIT);
+    compilation_result = DUAL_Shader_load_VS_GEO_FS(&renderer->shaders.shader_billboard, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_billboard.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_billboard.gs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_billboard.fs", DUAL_SHADER_UNLIT);
 
     renderer->render_mode = DUAL_RENDER_LIT;
     renderer->camera = DUAL_Camera3D_Create((DUAL_Vec3){0.0f, 0.0f, 0.0f}, DUAL_VECTOR_UP, DUAL_VECTOR_FRONT, DUAL_CAMERA_YAW, DUAL_CAMERA_PITCH, DUAL_CAMERA_SPEED, DUAL_CAMERA_SENSIVITY, DUAL_CAMERA_ZOOM);
@@ -635,6 +640,18 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     renderer->perspective_projection = DUAL_Mat4_Perspective(renderer->fov_radians, aspect, renderer->plan_proche, renderer->plan_lointain);
 
     renderer->cull_mode = DUAL_CULL_BACK;
+
+
+    // On creer le VBO et VAO pour le billboard
+    DUAL_Vec3 billboard_point = {0.0f, 0.0f, 0.0f};
+    glGenVertexArrays(1, &renderer->billboard_vao);
+    glGenBuffers(1, &renderer->billboard_vbo);
+    glBindVertexArray(renderer->billboard_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, renderer->billboard_vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(DUAL_Vec3), &billboard_point, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(DUAL_Vec3), (void*)0);
+    glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
 
 
     renderer->debug_renderer.count = 0;
@@ -812,6 +829,44 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
         glDrawElements(GL_TRIANGLES, (GLsizei)model->meshes[i].index_count, GL_UNSIGNED_INT, 0);
     }
     glBindVertexArray(0);
+}
+
+void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, DUAL_Transform3D transform) {
+    if (!renderer || !texture) return;
+
+    DUAL_Shader* previous_shader = renderer->current_shader;
+
+    renderer->current_shader = &renderer->shaders.shader_billboard;
+    DUAL_Shader_use(renderer->current_shader);
+
+    // Désactivation du Cull Face pour éviter que le Quad ne soit ignoré
+    glDisable(GL_CULL_FACE);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, DUAL_Internal_GetTextureID(texture));
+    glUniform1i(glGetUniformLocation(renderer->current_shader->shaderID, "texture_diffuse"), 0);
+
+    DUAL_Mat4 vp = DUAL_Mat4_Multiply(renderer->perspective_projection, DUAL_Camera3D_GetViewMatrix(&renderer->camera));
+    DUAL_Shader_setMat4(renderer->current_shader, "uVP", vp);
+
+    DUAL_Shader_setVec3(renderer->current_shader, "uCameraPos", renderer->camera.position);
+
+    DUAL_Vec2 size = { transform.echelle.x, transform.echelle.y };
+    DUAL_Shader_setVec2(renderer->current_shader, "uSize", size);
+
+    DUAL_Shader_setVec3(renderer->current_shader, "uPosition", transform.position);
+
+    glBindVertexArray(renderer->billboard_vao);
+    glDrawArrays(GL_POINTS, 0, 1);
+    glBindVertexArray(0);
+
+    // Réactivation du Culling selon le mode global
+    ApplyCullMode3D(renderer->cull_mode);
+
+    renderer->current_shader = previous_shader;
+    if (previous_shader) {
+        DUAL_Shader_use(previous_shader);
+    }
 }
 
 void DUAL_Renderer3d_SendLightInfosToShader(DUAL_Renderer3D* renderer, DUAL_Shader* shader) {

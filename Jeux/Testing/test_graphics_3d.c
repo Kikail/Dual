@@ -49,13 +49,21 @@ int main() {
     result = DUAL_Model_Load(resourceManager, MODEL_FIRETRUCK_PATH, &ambulanceModel, &materialCount, &materials);
     DEBUG_DUAL_RESULT(result);
 
+    // On charge une texture de test
+    DUAL_Texture* texture = NULL;
+    result = DUAL_Texture_LoadFromFile(resourceManager, TEXTURE_DEFAULT_PATH, DUAL_FILTER_NEAREST, &texture);
+    DEBUG_DUAL_RESULT(result);
 
-    // Ajuster la position/échelle du personnage
+    // Position de l'ambulance
     DUAL_Transform3D ambulanceTransform3D = {
         .position = {0.0, -2.0, 5.0},
         .echelle = {1.0, 1.0, 1.0}, // Ajustez selon la taille réelle du modèle
         .rotation_euler_radians = {0.0, M_PI, 0.0},
     };
+
+    // Position du billboard
+    DUAL_Transform3D billboard_transform = ambulanceTransform3D;
+    billboard_transform.position.y += 2.0;
 
     // On affiche les stats de notre resource manager
     DUAL_ResourceManager_Log(resourceManager);
@@ -161,6 +169,7 @@ int main() {
         DUAL_Renderer3D_Begin(renderer3D);
         DUAL_Debug_Draw_Model_BoundingBox(renderer3D, DUAL_Model_GetBoundingBox(ambulanceModel), ambulanceTransform3D ,DUAL_VEC3_COLOR_BLUE);
         DUAL_DrawModel(renderer3D, ambulanceModel, materials, ambulanceTransform3D);
+        DUAL_DrawBillboard(renderer3D, texture, billboard_transform);
         DUAL_Renderer3D_End(renderer3D);
 
         DUAL_EndFrame(app);
