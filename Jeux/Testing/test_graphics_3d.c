@@ -13,6 +13,7 @@
 #include "dual_utils.h"
 #include "../../SDK/include/DUAL_Graphics/shader.h"
 #include "DUAL_Graphics/camera3d.h"
+#include "DUAL_Graphics/particle_system.h"
 
 #define MODEL_AMBULANCE_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/cars/OBJ format/ambulance.obj"
 #define MODEL_FIRETRUCK_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/cars/OBJ format/firetruck.obj"
@@ -27,13 +28,13 @@ int main() {
     // On initialise l'application
     DUAL_App* app = NULL;
     DUAL_AppConfig config = {
-        .largeur_ecran = 800,
-        .hauteur_ecran = 480,
+        .largeur_ecran = 1200,
+        .hauteur_ecran = 1200,
         .plein_ecran = false,
         .fps_cible = 60,
         .titre_fenetre = "DUAL Core Testing",
         .vsync_actif = false,
-        .screenLayout = DUAL_LAYOUT_VERTICAL_SPLIT
+        .screenLayout = DUAL_LAYOUT_NO_SPLIT
     };
     DUAL_Result result = DUAL_Init(&config, &app);
     DEBUG_DUAL_RESULT(result);
@@ -60,6 +61,9 @@ int main() {
         .echelle = {1.0, 1.0, 1.0}, // Ajustez selon la taille réelle du modèle
         .rotation_euler_radians = {0.0, M_PI, 0.0},
     };
+
+    ParticleSystem particle_system;
+    ParticleSystem_Create(1000, &particle_system);
 
     // Position du billboard
     DUAL_Transform3D billboard_transform = ambulanceTransform3D;
@@ -154,6 +158,7 @@ int main() {
                 rendererMode = 0;
             DUAL_Renderer3D_SetRenderMode(renderer3D, rendererMode);
         }
+        ParticleSystem_Update(&particle_system, DUAL_GetDeltaTime(app));
 
 
         // On selectionne l'ecran du bas
@@ -169,13 +174,21 @@ int main() {
         DUAL_Renderer3D_Begin(renderer3D);
         DUAL_Debug_Draw_Model_BoundingBox(renderer3D, DUAL_Model_GetBoundingBox(ambulanceModel), ambulanceTransform3D ,DUAL_VEC3_COLOR_BLUE);
         DUAL_DrawModel(renderer3D, ambulanceModel, materials, ambulanceTransform3D);
-        DUAL_DrawBillboard(renderer3D, texture, billboard_transform);
+        for (int i = 0; i < particle_system.nb_particles; i++) {
+            if (particle_system.particles[i].lifespan > 0) {
+                DUAL_Transform3D tmp;
+                tmp.position = particle_system.particles[i].position;
+                tmp.echelle = (DUAL_Vec3){1.0, 1.0, 1.0};
+                DUAL_DrawBillboard(renderer3D, texture, tmp);
+            }
+        }
         DUAL_Renderer3D_End(renderer3D);
 
         DUAL_EndFrame(app);
     }
 
     // On ferme proprement l'application
+    ParticleSystem_Clean(&particle_system);
     DUAL_ResourceManager_Destroy(resourceManager);
     DUAL_Renderer3D_Destroy(renderer3D);
     DUAL_Shutdown(app);
