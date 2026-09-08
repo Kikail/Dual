@@ -6,10 +6,14 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include(FetchContent)
+
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Disable FetchContent updates")
+
 FetchContent_Declare(
         box3d
         GIT_REPOSITORY https://github.com/erincatto/box3d.git
         GIT_TAG        main
+        GIT_SHALLOW    TRUE
 )
 FetchContent_MakeAvailable(box3d)
 

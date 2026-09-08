@@ -4,6 +4,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "../../SDK/include/DUAL_Core/dual_core.h"
 #include "../../SDK/include/DUAL_Graphics/dual_graphics_3d.h"
@@ -15,15 +16,48 @@
 #include "DUAL_Graphics/camera3d.h"
 #include "DUAL_Graphics/particle_system.h"
 
-#define MODEL_AMBULANCE_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/cars/OBJ format/ambulance.obj"
-#define MODEL_FIRETRUCK_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/cars/OBJ format/firetruck.obj"
-#define MODEL_CHARACTER_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/skeletalModels/Remy.dae"
-#define TEXTURE_DEFAULT_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/skeletalModels/default_texture.png"
-#define ANIMATION_DANCE_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/skeletalModels/Capoeira.dae"
-#define ANIMATION_DANCE_2_PATH "/home/killian/CLionProjects/Dual/Jeux/resources/3D/skeletalModels/Hip Hop Dancing.dae"
+#define MODEL_AMBULANCE_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/cars/OBJ format/ambulance.obj"
+#define MODEL_FIRETRUCK_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/cars/OBJ format/firetruck.obj"
+#define MODEL_CHARACTER_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/Remy.dae"
+#define TEXTURE_DEFAULT_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/default_texture.png"
+#define ANIMATION_DANCE_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/Capoeira.dae"
+#define ANIMATION_DANCE_2_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/Hip Hop Dancing.dae"
+#define TEST_PATH "/home/killian/Projects/C/Dual/Jeux/resources/2D/Characters/man.png"
+
+float random_value(float min, float max) {
+    float scale = (float)rand() / (float)RAND_MAX;
+    return min + scale * (max - min);
+}
+
+DUAL_Vec3 init_position_function(void){
+    return (DUAL_Vec3){0.0, 0.0, 5.0};
+}
+DUAL_Vec3 init_velocity_function(void){
+    return (DUAL_Vec3){random_value(-5.0, 5.0), random_value(10.0,30.0), random_value(-5.0, 5.0)};
+}
+DUAL_Vec3 init_scale_function(void){
+    return (DUAL_Vec3){1.0, 1.0, 1.0};
+}
+DUAL_Vec3 init_color_function(void){
+    return (DUAL_Vec3){1.0, 1.0, 1.0};
+}
+float init_lifetime(void){
+    return (float)random_value(1.0, 10.0);
+}
+
+void velocity_over_time(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime) {
+    for (unsigned int i = 0; i < nbParticles; i++) {
+        particles[i].velocity.y += -9.81 * deltaTime;
+        particles[i].position.x += particles[i].velocity.x * deltaTime;
+        particles[i].position.y += particles[i].velocity.y * deltaTime;
+        particles[i].position.z += particles[i].velocity.z * deltaTime;
+    }
+}
 
 int main() {
     DUAL_Log(DUAL_LOG_INFO, "Test Graphics 2D started !");
+
+    srand(time(NULL));
 
     // On initialise l'application
     DUAL_App* app = NULL;
@@ -54,6 +88,9 @@ int main() {
     DUAL_Texture* texture = NULL;
     result = DUAL_Texture_LoadFromFile(resourceManager, TEXTURE_DEFAULT_PATH, DUAL_FILTER_NEAREST, &texture);
     DEBUG_DUAL_RESULT(result);
+    DUAL_Texture* texture2 = NULL;
+    result = DUAL_Texture_LoadFromFile(resourceManager, TEST_PATH, DUAL_FILTER_NEAREST, &texture2);
+    DEBUG_DUAL_RESULT(result);
 
     // Position de l'ambulance
     DUAL_Transform3D ambulanceTransform3D = {
@@ -62,8 +99,21 @@ int main() {
         .rotation_euler_radians = {0.0, M_PI, 0.0},
     };
 
+    Particle particles[1000];
+    ParticleEmitter* emitter = ParticleEmitter_Init(
+        init_position_function,
+        init_scale_function,
+        init_color_function,
+        init_velocity_function,
+        init_lifetime,
+        NULL,
+        velocity_over_time,
+        NULL,
+        particles,
+        1000
+    );
     ParticleSystem particle_system;
-    ParticleSystem_Create(1000, &particle_system);
+    ParticleSystem_Create(1000, particles, emitter, &particle_system);
 
     // Position du billboard
     DUAL_Transform3D billboard_transform = ambulanceTransform3D;
@@ -108,7 +158,7 @@ int main() {
 
     // On utilise notre shader perso DUAL_Renderer3D_LoadShader(renderer3D, vertex_shader_skeleton_lit_src_main, fragment_shader_lit_src_main, &shader);
     DUAL_Shader shader;
-    DUAL_Shader_load_VS_FS(&shader, "/home/killian/CLionProjects/Dual/SDK/internal_resources/shaders/i_shader_3d_skeletal_base.vs", "/home/killian/CLionProjects/Dual/SDK/internal_resources/shaders/i_shader_3d_unlit_base.fs", DUAL_SHADER_UNLIT);
+    DUAL_Shader_load_VS_FS(&shader, "/home/killian/Projects/C/Dual/SDK/internal_resources/shaders/i_shader_3d_skeletal_base.vs", "/home/killian/Projects/C/Dual/SDK/internal_resources/shaders/i_shader_3d_unlit_base.fs", DUAL_SHADER_UNLIT);
     //DUAL_Renderer3D_UseCustomShader(renderer3D, &shader);
     DUAL_Renderer3D_UseShader(renderer3D, SHADER3D_LIT);
 
@@ -144,15 +194,21 @@ int main() {
         if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_UP)) {
             DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
             DUAL_Camera3D_ProcessKeyboard(cam, FORWARD, DUAL_GetDeltaTime(app));
-            DUAL_Log(DUAL_LOG_INFO, "%f %f %f", cam->position.x, cam->position.y, cam->position.z);
         }
         if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_DOWN)) {
             DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
             DUAL_Camera3D_ProcessKeyboard(cam, BACKWARD, DUAL_GetDeltaTime(app));
-            DUAL_Log(DUAL_LOG_INFO, "%f %f %f", cam->position.x, cam->position.y, cam->position.z);
+        }
+        if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_LEFT)) {
+            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
+            DUAL_Camera3D_ProcessKeyboard(cam, LEFT, DUAL_GetDeltaTime(app));
+        }
+        if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_RIGHT)) {
+            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
+            DUAL_Camera3D_ProcessKeyboard(cam, RIGHT, DUAL_GetDeltaTime(app));
         }
         // On change le mode de rendu
-        if (DUAL_IsButtonPressed(inputManager, DUAL_BUTTON_RIGHT)) {
+        if (DUAL_IsButtonPressed(inputManager, DUAL_BUTTON_A)) {
             rendererMode += 1;
             if (rendererMode > 2)
                 rendererMode = 0;
@@ -174,21 +230,23 @@ int main() {
         DUAL_Renderer3D_Begin(renderer3D);
         DUAL_Debug_Draw_Model_BoundingBox(renderer3D, DUAL_Model_GetBoundingBox(ambulanceModel), ambulanceTransform3D ,DUAL_VEC3_COLOR_BLUE);
         DUAL_DrawModel(renderer3D, ambulanceModel, materials, ambulanceTransform3D);
-        for (int i = 0; i < particle_system.nb_particles; i++) {
-            if (particle_system.particles[i].lifespan > 0) {
+
+        for (int i = 0; i < 1000; i++) {
+            if (particles[i].lifespan > 0) {
                 DUAL_Transform3D tmp;
-                tmp.position = particle_system.particles[i].position;
+                tmp.position = particles[i].position;
                 tmp.echelle = (DUAL_Vec3){1.0, 1.0, 1.0};
-                DUAL_DrawBillboard(renderer3D, texture, tmp);
+                DUAL_DrawBillboard(renderer3D, texture2, tmp);
             }
         }
+
         DUAL_Renderer3D_End(renderer3D);
 
         DUAL_EndFrame(app);
     }
 
     // On ferme proprement l'application
-    ParticleSystem_Clean(&particle_system);
+    //ParticleSystem_Clean(&particle_system);
     DUAL_ResourceManager_Destroy(resourceManager);
     DUAL_Renderer3D_Destroy(renderer3D);
     DUAL_Shutdown(app);
