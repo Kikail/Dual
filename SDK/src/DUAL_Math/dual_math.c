@@ -218,6 +218,28 @@ void DUAL_Mat4_Log(DUAL_Mat4 m) {
         printf("[%.2f, %.2f, %.2f, %.2f]\n", m.m[i], m.m[i+4], m.m[i+8], m.m[i+12]);
     }
 }
+DUAL_Vec3 DUAL_Mat4_MultiplyVector(DUAL_Mat4 mat, DUAL_Vec3 v) {
+    DUAL_Vec3 res;
+
+     float x = mat.m[0] * v.x + mat.m[4] * v.y + mat.m[8]  * v.z + mat.m[12];
+    float y = mat.m[1] * v.x + mat.m[5] * v.y + mat.m[9]  * v.z + mat.m[13];
+    float z = mat.m[2] * v.x + mat.m[6] * v.y + mat.m[10] * v.z + mat.m[14];
+    float w = mat.m[3] * v.x + mat.m[7] * v.y + mat.m[11] * v.z + mat.m[15];
+
+    if (w != 0.0f && w != 1.0f) {
+        float inv_w = 1.0f / w;
+        res.x = x * inv_w;
+        res.y = y * inv_w;
+        res.z = z * inv_w;
+    } else {
+        res.x = x;
+        res.y = y;
+        res.z = z;
+    }
+
+    return res;
+}
+
 
 /* ============================================================================
  * INTERPOLATIONS

@@ -29,23 +29,33 @@ float random_value(float min, float max) {
     return min + scale * (max - min);
 }
 
+float current_rotation;
+DUAL_Mat4* rotation;
+
 DUAL_Vec3 init_position_function(void){
     return (DUAL_Vec3){0.0, 0.0, 5.0};
 }
 DUAL_Vec3 init_velocity_function(void){
-    return (DUAL_Vec3){random_value(-5.0, 5.0), random_value(10.0,30.0), random_value(-5.0, 5.0)};
+    DUAL_Vec3 velocity = {random_value(-2.0, 2.0), random_value(10.0,30.0), random_value(-2.0, 2.0)};
+    return DUAL_Mat4_MultiplyVector(*rotation, velocity);
 }
 DUAL_Vec3 init_scale_function(void){
-    return (DUAL_Vec3){1.0, 1.0, 1.0};
+    return (DUAL_Vec3){0.0, 0.0, 0.0};
 }
 DUAL_Vec3 init_color_function(void){
-    return (DUAL_Vec3){1.0, 1.0, 1.0};
+    return (DUAL_Vec3){0.0, 0.0, 0.0};
 }
 float init_lifetime(void){
-    return (float)random_value(1.0, 10.0);
+    return (float)random_value(1.0, 3.0);
 }
 
 void particle_over_time(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime) {
+    current_rotation += deltaTime * 120.0;
+    if (current_rotation >= 360.0)current_rotation = 0.0;
+    DUAL_Mat4 rotx = DUAL_Mat4_Rotate((DUAL_Vec3){1.0,0.0,0.0}, DUAL_RAD(45.0));
+    DUAL_Mat4 roty = DUAL_Mat4_Rotate((DUAL_Vec3){0.0,1.0,0.0}, DUAL_RAD(current_rotation));
+    *rotation = DUAL_Mat4_Multiply(roty, rotx);
+
     for (unsigned int i = 0; i < nbParticles; i++) {
         particles[i].velocity.y += -9.81 * deltaTime;
         particles[i].position.x += particles[i].velocity.x * deltaTime;
@@ -62,7 +72,7 @@ void particle_over_time(struct ParticleEmitter* emitter, Particle* particles, un
     }
 }
 
-#define PARTICLE_NUMBER 1000
+#define PARTICLE_NUMBER 20000
 
 int main() {
     DUAL_Log(DUAL_LOG_INFO, "Test Graphics 2D started !");
@@ -108,6 +118,10 @@ int main() {
         .echelle = {1.0, 1.0, 1.0}, // Ajustez selon la taille réelle du modèle
         .rotation_euler_radians = {0.0, M_PI, 0.0},
     };
+
+    current_rotation = 0.0;
+    DUAL_Mat4 mat = DUAL_Mat4_Identity();
+    rotation = &mat;
 
     Particle particles[PARTICLE_NUMBER];
     ParticleEmitter* emitter = ParticleEmitter_Init(
@@ -244,7 +258,7 @@ int main() {
                 DUAL_Transform3D tmp;
                 tmp.position = particles[i].position;
                 tmp.echelle = particles[i].size;
-                DUAL_DrawBillboard(renderer3D, texture2, tmp, particles[i].color);
+                DUAL_DrawBillboard(renderer3D, texture, tmp, particles[i].color);
             }
         }
 

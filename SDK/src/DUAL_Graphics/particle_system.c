@@ -21,7 +21,6 @@ Particle Particle_Create(DUAL_Vec3 position, DUAL_Vec3 velocity, DUAL_Vec3 color
 }
 
 void ParticleSystem_Create(unsigned int nb_particles, Particle* particles, ParticleEmitter* emitter, ParticleSystem* particleSystem) {
-    particleSystem->particles = malloc(sizeof(Particle) * nb_particles);
     particleSystem->nb_particles = nb_particles;
     if (particles == NULL) {
         DUAL_Log(DUAL_LOG_ERROR, "ParticleEmitter: particleSystem is NULL");

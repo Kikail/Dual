@@ -71,6 +71,7 @@ DUAL_Mat4 DUAL_Mat4_Ortho(float gauche, float droite, float bas, float haut, flo
 DUAL_Mat4 DUAL_Mat4_Perspective(float fov_radians, float ratio_aspect, float proche, float lointain);
 DUAL_Mat4 DUAL_Mat4_LookAt(DUAL_Vec3 position, DUAL_Vec3 cible, DUAL_Vec3 haut);
 void      DUAL_Mat4_Log(DUAL_Mat4 m);
+DUAL_Vec3 DUAL_Mat4_MultiplyVector(DUAL_Mat4 mat, DUAL_Vec3 v);
 
 /* Tests de collision */
 bool DUAL_CollideRectRect(DUAL_Rect a, DUAL_Rect b);
