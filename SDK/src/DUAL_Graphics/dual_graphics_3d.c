@@ -831,7 +831,7 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
     glBindVertexArray(0);
 }
 
-void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, DUAL_Transform3D transform) {
+void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, DUAL_Transform3D transform, DUAL_Vec3 color) {
     if (!renderer || !texture) return;
 
     DUAL_Shader* previous_shader = renderer->current_shader;
@@ -855,6 +855,7 @@ void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, 
     DUAL_Shader_setVec2(renderer->current_shader, "uSize", size);
 
     DUAL_Shader_setVec3(renderer->current_shader, "uPosition", transform.position);
+    DUAL_Shader_setVec3(renderer->current_shader, "uColor", color);
 
     glBindVertexArray(renderer->billboard_vao);
     glDrawArrays(GL_POINTS, 0, 1);

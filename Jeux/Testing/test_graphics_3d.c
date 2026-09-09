@@ -45,14 +45,24 @@ float init_lifetime(void){
     return (float)random_value(1.0, 10.0);
 }
 
-void velocity_over_time(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime) {
+void particle_over_time(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime) {
     for (unsigned int i = 0; i < nbParticles; i++) {
         particles[i].velocity.y += -9.81 * deltaTime;
         particles[i].position.x += particles[i].velocity.x * deltaTime;
         particles[i].position.y += particles[i].velocity.y * deltaTime;
         particles[i].position.z += particles[i].velocity.z * deltaTime;
+
+        particles[i].size.x = 1-(particles[i].lifespan / particles[i].lifetime);
+        particles[i].size.y = 1-(particles[i].lifespan / particles[i].lifetime);
+        particles[i].size.z = 1-(particles[i].lifespan / particles[i].lifetime);
+
+        particles[i].color.x = particles[i].lifespan / particles[i].lifetime;
+        particles[i].color.y = particles[i].lifespan / particles[i].lifetime;
+        particles[i].color.z = particles[i].lifespan / particles[i].lifetime;
     }
 }
+
+#define PARTICLE_NUMBER 1000
 
 int main() {
     DUAL_Log(DUAL_LOG_INFO, "Test Graphics 2D started !");
@@ -99,21 +109,19 @@ int main() {
         .rotation_euler_radians = {0.0, M_PI, 0.0},
     };
 
-    Particle particles[1000];
+    Particle particles[PARTICLE_NUMBER];
     ParticleEmitter* emitter = ParticleEmitter_Init(
         init_position_function,
         init_scale_function,
         init_color_function,
         init_velocity_function,
         init_lifetime,
-        NULL,
-        velocity_over_time,
-        NULL,
+        particle_over_time,
         particles,
-        1000
+        PARTICLE_NUMBER
     );
     ParticleSystem particle_system;
-    ParticleSystem_Create(1000, particles, emitter, &particle_system);
+    ParticleSystem_Create(PARTICLE_NUMBER, particles, emitter, &particle_system);
 
     // Position du billboard
     DUAL_Transform3D billboard_transform = ambulanceTransform3D;
@@ -231,12 +239,12 @@ int main() {
         DUAL_Debug_Draw_Model_BoundingBox(renderer3D, DUAL_Model_GetBoundingBox(ambulanceModel), ambulanceTransform3D ,DUAL_VEC3_COLOR_BLUE);
         DUAL_DrawModel(renderer3D, ambulanceModel, materials, ambulanceTransform3D);
 
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < PARTICLE_NUMBER; i++) {
             if (particles[i].lifespan > 0) {
                 DUAL_Transform3D tmp;
                 tmp.position = particles[i].position;
-                tmp.echelle = (DUAL_Vec3){1.0, 1.0, 1.0};
-                DUAL_DrawBillboard(renderer3D, texture2, tmp);
+                tmp.echelle = particles[i].size;
+                DUAL_DrawBillboard(renderer3D, texture2, tmp, particles[i].color);
             }
         }
 

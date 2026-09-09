@@ -50,9 +50,7 @@ ParticleEmitter* ParticleEmitter_Init(
     DUAL_Vec3 (*init_color)(void),
     DUAL_Vec3 (*init_velocity)(void),
     float (*init_lifetime)(void),
-    void (*size_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime),
-    void (*color_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime),
-    void (*velocity_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime),
+    void (*particle_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime),
     Particle* particles,
     unsigned int nb_particles
 ){
@@ -90,9 +88,7 @@ ParticleEmitter* ParticleEmitter_Init(
     }
 
     // Ici c'est pas important de savoir si c'est un pointeur vide car nous executons pendant l'update
-    emitter->color_over_time = color_over_time;
-    emitter->size_over_time = size_over_time;
-    emitter->velocity_over_time = velocity_over_time;
+    emitter->particle_over_time = particle_over_time;
 
     if (particles == NULL) {
         DUAL_Log(DUAL_LOG_ERROR, "ParticleEmitter: particles is NULL");
@@ -107,14 +103,13 @@ ParticleEmitter* ParticleEmitter_Init(
         particle->color = emitter->init_color();
         particle->velocity = emitter->init_velocity();
         particle->lifespan = emitter->init_lifetime();
+        particle->lifetime = particle->lifespan;
     }
 
     return emitter;
 }
 void ParticleEmitter_Update(ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime) {
-    if (emitter->color_over_time != NULL) emitter->color_over_time(emitter, particles, nbParticles, deltaTime);
-    if (emitter->size_over_time != NULL) emitter->size_over_time(emitter, particles, nbParticles, deltaTime);
-    if (emitter->velocity_over_time != NULL) emitter->velocity_over_time(emitter, particles, nbParticles, deltaTime);
+    if (emitter->particle_over_time != NULL) emitter->particle_over_time(emitter, particles, nbParticles, deltaTime);
 
     for (unsigned int i = 0; i < nbParticles; i++) {
         Particle* particle = &particles[i];
@@ -125,6 +120,7 @@ void ParticleEmitter_Update(ParticleEmitter* emitter, Particle* particles, unsig
             particle->color = emitter->init_color();
             particle->velocity = emitter->init_velocity();
             particle->lifespan = emitter->init_lifetime();
+            particle->lifetime = particle->lifespan;
         }
     }
 }

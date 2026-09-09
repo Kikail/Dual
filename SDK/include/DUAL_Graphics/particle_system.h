@@ -13,6 +13,7 @@ typedef struct Particle {
     DUAL_Vec3 color;
     DUAL_Vec3 size;
     float lifespan;
+    float lifetime;
 }Particle;
 Particle Particle_Create(DUAL_Vec3 position, DUAL_Vec3 velocity, DUAL_Vec3 color, DUAL_Vec3 size, float life);
 
@@ -25,9 +26,7 @@ typedef struct ParticleEmitter {
     DUAL_Vec3 (*init_color)(void);
     DUAL_Vec3 (*init_velocity)(void);
     float (*init_lifetime)(void);
-    void (*size_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime);
-    void (*color_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime);
-    void (*velocity_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime);
+    void (*particle_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime);
 }ParticleEmitter;
 ParticleEmitter* ParticleEmitter_Init(
     DUAL_Vec3 (*init_position_function)(void),
@@ -35,9 +34,7 @@ ParticleEmitter* ParticleEmitter_Init(
     DUAL_Vec3 (*init_color)(void),
     DUAL_Vec3 (*init_velocity)(void),
     float (*init_lifetime)(void),
-    void (*size_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime),
-    void (*color_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime),
-    void (*velocity_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime),
+    void (*particle_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime),
     Particle* particles,
     unsigned int nb_particles
 );
