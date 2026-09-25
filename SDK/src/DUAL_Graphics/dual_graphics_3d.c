@@ -960,6 +960,58 @@ void DUAL_Debug_DrawAABB(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Vec3 color)
     DUAL_Debug_DrawLine(debug, c3, c7, color); DUAL_Debug_DrawLine(debug, c4, c8, color);
 }
 
+void DUAL_Debug_DrawSphere(DUAL_Renderer3D* debug, DUAL_Sphere sphere, DUAL_Vec3 color) {
+    const int segments = 16; // Nombre de lignes par cercle (16 est un très bon compromis perf/visuel)
+    const float step = (2.0f * M_PI) / (float)segments;
+
+    for (int i = 0; i < segments; i++) {
+        float theta1 = i * step;
+        float theta2 = (i + 1) * step;
+
+        float cos1 = cosf(theta1), sin1 = sinf(theta1);
+        float cos2 = cosf(theta2), sin2 = sinf(theta2);
+
+        // 1. Cercle horizontal (Plan XZ)
+        DUAL_Vec3 xz1 = {
+            sphere.centre.x + sphere.rayon * cos1,
+            sphere.centre.y,
+            sphere.centre.z + sphere.rayon * sin1
+        };
+        DUAL_Vec3 xz2 = {
+            sphere.centre.x + sphere.rayon * cos2,
+            sphere.centre.y,
+            sphere.centre.z + sphere.rayon * sin2
+        };
+        DUAL_Debug_DrawLine(debug, xz1, xz2, color);
+
+        // 2. Cercle vertical (Plan XY)
+        DUAL_Vec3 xy1 = {
+            sphere.centre.x + sphere.rayon * cos1,
+            sphere.centre.y + sphere.rayon * sin1,
+            sphere.centre.z
+        };
+        DUAL_Vec3 xy2 = {
+            sphere.centre.x + sphere.rayon * cos2,
+            sphere.centre.y + sphere.rayon * sin2,
+            sphere.centre.z
+        };
+        DUAL_Debug_DrawLine(debug, xy1, xy2, color);
+
+        // 3. Cercle vertical (Plan YZ)
+        DUAL_Vec3 yz1 = {
+            sphere.centre.x,
+            sphere.centre.y + sphere.rayon * cos1,
+            sphere.centre.z + sphere.rayon * sin1
+        };
+        DUAL_Vec3 yz2 = {
+            sphere.centre.x,
+            sphere.centre.y + sphere.rayon * cos2,
+            sphere.centre.z + sphere.rayon * sin2
+        };
+        DUAL_Debug_DrawLine(debug, yz1, yz2, color);
+    }
+}
+
 void DUAL_Debug_Render(DUAL_Renderer3D* debug, DUAL_Renderer3D* renderer) {
     if (debug->debug_renderer.count == 0) return;
 

@@ -27,7 +27,6 @@ bool EstCartoucheInseree(const char* chemin) {
  *
  * Fonctionnalites a ajouter:
  *  - Attenuation du son avec la distance 2D ou 3D
- *  - Systeme de particules
  *  - Simples collisions 2D/3D ainsi que des Raycast
  *  - Des tilemaps
  *  - Transparence sur les shaders

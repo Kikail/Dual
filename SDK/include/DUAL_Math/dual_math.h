@@ -32,6 +32,12 @@ typedef struct DUAL_Circle { DUAL_Vec2 centre; float rayon; } DUAL_Circle;
 typedef struct DUAL_AABB { DUAL_Vec3 min; DUAL_Vec3 max; } DUAL_AABB;
 typedef struct DUAL_Sphere { DUAL_Vec3 centre; float rayon; } DUAL_Sphere;
 
+float DUAL_Min(float a, float b);
+float DUAL_Max(float a, float b);
+
+DUAL_Vec3 DUAL_Vec3_Min(DUAL_Vec3 a, DUAL_Vec3 b);
+DUAL_Vec3 DUAL_Vec3_Max(DUAL_Vec3 a, DUAL_Vec3 b);
+
 /* Opérations sur DUAL_Vec2 */
 DUAL_Vec2 DUAL_Vec2_Add(DUAL_Vec2 a, DUAL_Vec2 b);
 DUAL_Vec2 DUAL_Vec2_Sub(DUAL_Vec2 a, DUAL_Vec2 b);

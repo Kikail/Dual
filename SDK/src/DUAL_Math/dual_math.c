@@ -3,6 +3,23 @@
 #include <stdio.h>
 #include <string.h>
 
+float DUAL_Min(float a, float b) {
+    return a>b? b: a;
+}
+float DUAL_Max(float a, float b) {
+    return a>b? a: b;
+}
+DUAL_Vec3 DUAL_Vec3_Min(DUAL_Vec3 a, DUAL_Vec3 b) {
+    float len_a_sq = a.x * a.x + a.y * a.y + a.z * a.z;
+    float len_b_sq = b.x * b.x + b.y * b.y + b.z * b.z;
+    return (len_a_sq < len_b_sq) ? a : b;
+}
+DUAL_Vec3 DUAL_Vec3_Max(DUAL_Vec3 a, DUAL_Vec3 b) {
+    float len_a_sq = a.x * a.x + a.y * a.y + a.z * a.z;
+    float len_b_sq = b.x * b.x + b.y * b.y + b.z * b.z;
+    return (len_a_sq > len_b_sq) ? a : b;
+}
+
 /* ============================================================================
  * VECTEURS 2D & 3D
  * ========================================================================== */

@@ -57,6 +57,7 @@ set(SDK_SOURCES
         SDK/src/DUAL_Math/dual_math.c
         SDK/src/DUAL_Graphics/dual_graphics_2d.c
         SDK/src/DUAL_Graphics/dual_graphics_3d.c
+        SDK/src/DUAL_Physics/dual_physics.c
         SDK/src/DUAL_Graphics/camera3d.c
         SDK/src/DUAL_Graphics/camera2d.c
         SDK/src/DUAL_Graphics/particle_system.c
