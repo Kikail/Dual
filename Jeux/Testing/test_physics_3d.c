@@ -54,6 +54,30 @@ int main() {
     int projectionMode = 0;
     int rendererMode = 0;
 
+    DUAL_PhysicsWorld* physicsWorld = DUAL_PhysicsWorld_Create((DUAL_Vec3){0.0,-9.81,0.0});
+    DUAL_RigidBody body;
+    body.masse = 1.0;
+    body.est_statique = true;
+    body.position = (DUAL_Vec3){-10.0, 0.0, 60.0};
+    body.collider.type = DUAL_COLLIDER_AABB;
+    body.vitesse = (DUAL_Vec3){15.0, 10.0, 0.0};
+    body.collider.shape.aabb = (DUAL_AABB){(DUAL_Vec3){-5.0,-5.0,-5.0},(DUAL_Vec3){5.0,5.0,5.0}};
+
+    DUAL_RigidBody body2;
+    body2.masse = 1.0;
+    body2.est_statique = false;
+    body2.position = (DUAL_Vec3){10.0, 0.0, 60.0};
+    body2.collider.type = DUAL_COLLIDER_SPHERE;
+    body2.vitesse = (DUAL_Vec3){-5.0, 25.0, 0.0};
+    body2.collider.shape.sphere = (DUAL_Sphere){(DUAL_Vec3){0.0,0.0,0.0}, 3.0};
+
+    DUAL_PhysicsWorld_AddBody(physicsWorld, body);
+    DUAL_PhysicsWorld_AddBody(physicsWorld, body2);
+
+    for (int k = 0; k < physicsWorld->count_bodies; k++) {
+        DUAL_Debug_PrintBody(&physicsWorld->bodies[k]);
+    }
+
     DUAL_AABB box;
     box.min = (DUAL_Vec3){-20.0, 0.0, 40.0};
     box.max = (DUAL_Vec3){-10.0, 10.0, 50.0};
@@ -114,11 +138,7 @@ int main() {
                 rendererMode = 0;
             DUAL_Renderer3D_SetRenderMode(renderer3D, rendererMode);
         }
-
-        box.max.x += sin(DUAL_GetTime(app)) * DUAL_GetDeltaTime(app) * 12;
-        box.min.x += sin(DUAL_GetTime(app)) * DUAL_GetDeltaTime(app) * 12;
-        sphere.centre.x += sin(DUAL_GetTime(app)) * DUAL_GetDeltaTime(app) * -12;
-
+        DUAL_PhysicsWorld_Step(physicsWorld, DUAL_GetDeltaTime(app));
 
         // On selectionne l'ecran du haut
         DUAL_SetActiveScreen(app, DUAL_SCREEN_RIGHT);
@@ -126,16 +146,15 @@ int main() {
         // On dessine nos images
         DUAL_Renderer3D_Begin(renderer3D);
 
-        DUAL_CollisionInfo collisionInfo = DUAL_Collide_SphereVSAABB(&sphere, &box);
-
-        if (collisionInfo.collision) {
-            sphere.centre = DUAL_Vec3_Add(sphere.centre, DUAL_Vec3_Scale(collisionInfo.normal, collisionInfo.penetration));
-            DUAL_Debug_DrawAABB(renderer3D, box, DUAL_VEC3_COLOR_GREEN);
-            DUAL_Debug_DrawSphere(renderer3D, sphere, DUAL_VEC3_COLOR_GREEN);
-        }
-        else {
-            DUAL_Debug_DrawAABB(renderer3D, box, DUAL_VEC3_COLOR_BLUE);
-            DUAL_Debug_DrawSphere(renderer3D, sphere, DUAL_VEC3_COLOR_RED);
+        for (int k = 0; k < physicsWorld->count_bodies; k++) {
+            switch (physicsWorld->bodies[k].collider.type) {
+                case DUAL_COLLIDER_AABB:
+                    DUAL_Debug_DrawAABB(renderer3D, DUAL_GetGlobalAABB(&physicsWorld->bodies[k]), DUAL_VEC3_COLOR_GREEN);
+                    break;
+                case DUAL_COLLIDER_SPHERE:
+                    DUAL_Debug_DrawSphere(renderer3D, DUAL_GetGlobalSphere(&physicsWorld->bodies[k]), DUAL_VEC3_COLOR_GREEN);
+                    break;
+            }
         }
 
         DUAL_Renderer3D_End(renderer3D);

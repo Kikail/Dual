@@ -64,9 +64,10 @@ typedef struct {
     DUAL_Vec3 point;     // Point d'impact dans le monde
 } DUAL_CollisionInfo;
 
+
+#define DUAL_PHYSICS_MAX_BODIES 100
 typedef struct {
-    DUAL_RigidBody* bodies;
-    uint32_t max_bodies;
+    DUAL_RigidBody bodies[DUAL_PHYSICS_MAX_BODIES];
     uint32_t count_bodies;
 
     DUAL_Heightmap* terrain; // Heightmap globale de l'environnement (optionnelle)
@@ -74,7 +75,7 @@ typedef struct {
 } DUAL_PhysicsWorld;
 
 
-DUAL_PhysicsWorld* DUAL_PhysicsWorld_Create(uint32_t max_bodies, DUAL_Vec3 gravite);
+DUAL_PhysicsWorld* DUAL_PhysicsWorld_Create(DUAL_Vec3 gravite);
 void DUAL_PhysicsWorld_Destroy(DUAL_PhysicsWorld* world);
 
 // Avancement de la simulation (Intégration d'Euler / Verlet rapide)
@@ -93,6 +94,11 @@ DUAL_CollisionInfo DUAL_Collide_AABBVSAABB(const DUAL_AABB* a, const DUAL_AABB* 
 DUAL_CollisionInfo DUAL_Collide_SphereVSAABB(const DUAL_Sphere* sphere, const DUAL_AABB* aabb);
 DUAL_CollisionInfo DUAL_Collide_CapsuleVSSphere(const DUAL_Capsule* capsule, const DUAL_Sphere* sphere);
 DUAL_CollisionInfo DUAL_Collide_CapsuleVSAABB(const DUAL_Capsule* capsule, const DUAL_AABB* aabb);
+
+DUAL_AABB DUAL_GetGlobalAABB(DUAL_RigidBody* body);
+DUAL_Sphere DUAL_GetGlobalSphere(DUAL_RigidBody* body);
+void DUAL_Debug_PrintAABB(DUAL_AABB aabb);
+void DUAL_Debug_PrintBody(DUAL_RigidBody* body);
 
 // Heightmap : Test d'altitude instantané (O(1))
 float DUAL_Heightmap_GetHeightAt(const DUAL_Heightmap* terrain, float world_x, float world_z);
