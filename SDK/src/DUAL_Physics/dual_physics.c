@@ -240,6 +240,14 @@ DUAL_CollisionInfo DUAL_Collide_AABBVSAABB(const DUAL_AABB* a, const DUAL_AABB* 
     return info;
 }
 
+DUAL_CollisionInfo DUAL_Collide_CapsuleVSCapsule(const DUAL_Capsule* capsule1, const DUAL_Capsule* capsule2) {
+    DUAL_CollisionInfo info;
+
+
+
+    return info;
+}
+
 void DUAL_Debug_PrintAABB(DUAL_AABB aabb) {
     DUAL_Log(DUAL_LOG_DEBUG, "min:(%f %f %f), max:(%f %f %f)", aabb.min.x, aabb.min.y, aabb.min.z, aabb.max.x, aabb.max.y, aabb.max.z);
 }

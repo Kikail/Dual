@@ -47,7 +47,8 @@ int main(int argc, char** argv) {
     GameAPI game = game_api_create();
 
     //const char* chemin_cartouche = "/media/killian/692B-8D17";
-    const char* chemin_cartouche = "/home/killian/Projects/C/DUAL_Games/Game01";
+    const char* chemin_cartouche = "/home/killian/Desktop/tmp_cle_usb";
+    //const char* chemin_cartouche = "/media/killian/692B-8D17";
     bool carteLue = false;
 
     DUAL_App* app = NULL;

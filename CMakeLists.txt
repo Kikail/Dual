@@ -31,21 +31,24 @@ add_compile_definitions(INTERNAL_RESOURCES_SHADERS_PATH="${CMAKE_SOURCE_DIR}/SDK
 
 # Liste des fichiers sources du moteur uniquement
 set(MOTEUR_SOURCES
+        Jeux/Testing/main.c
         SDK/src/DUAL_Core/dual_core.c
         SDK/thirdparty/glad/glad.c
-        Jeux/Testing/main.c
         SDK/include/dual_internal.h
         SDK/src/DUAL_Input/dual_input.c
         SDK/src/DUAL_Math/dual_math.c
         SDK/src/DUAL_Graphics/dual_graphics_2d.c
         SDK/src/DUAL_Graphics/dual_graphics_3d.c
+        SDK/src/DUAL_Physics/dual_physics.c
+        SDK/src/DUAL_Graphics/camera3d.c
+        SDK/src/DUAL_Graphics/camera2d.c
+        SDK/src/DUAL_Graphics/particle_system.c
+        SDK/src/DUAL_Graphics/shader.c
         SDK/src/DUAL_Resources/dual_resources.c
         SDK/src/DUAL_Audio/dual_audio.c
         SDK/src/DUAL_FS/dual_fs.c
         SDK/include/game_api.h
         SDK/include/dual_utils.h
-        SDK/include/DUAL_Graphics/particle_system.h
-        SDK/src/DUAL_Graphics/particle_system.c
 )
 
 # Sources du SDK partagées entre le moteur et les tests (sans aucun main.c)
@@ -192,3 +195,11 @@ target_include_directories(test_physics_3d PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
 target_link_libraries(test_physics_3d PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
+
+# Test Scene Loader
+add_executable(testing_scene_loader Jeux/Testing/testing_scene_loader.c ${SDK_SOURCES})
+target_include_directories(testing_scene_loader PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
+)
+target_link_libraries(testing_scene_loader PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)

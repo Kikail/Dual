@@ -5,6 +5,8 @@
 #ifndef DUAL_DUAL_UTILS_H
 #define DUAL_DUAL_UTILS_H
 
+#include "./DUAL_Core/dual_core.h"
+
 #define DEBUG
 
 // La fonction qui fait le travail (propre et facile à lire)

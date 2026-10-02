@@ -18,7 +18,6 @@
 
 static DUAL_Texture* bird_down = NULL;
 static DUAL_Texture* bird_up = NULL;
-static DUAL_Font* font = NULL;
 static DUAL_Texture* background_day = NULL;
 static DUAL_Texture* ground = NULL;
 static DUAL_Texture* pipe = NULL;
@@ -74,7 +73,6 @@ void my_init(INCLUDES_FONCTIONS) {
     // 1. VRAIE SÉCURITÉ : On s'assure que tout commence à NULL
     bird_down = NULL;
     bird_up = NULL;
-    font = NULL;
     background_day = NULL;
     ground = NULL;
     pipe = NULL;
@@ -89,10 +87,10 @@ void my_init(INCLUDES_FONCTIONS) {
     const char* racine = DUAL_FS_GetCartridgeRoot();
     char chemin_absolu[512];
 
-    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/yellowbird-downflap.png", racine);
+    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/redbird-downflap.png", racine);
     DUAL_Texture_LoadFromFile(resourceManager, chemin_absolu, DUAL_FILTER_LINEAR, &bird_down);
 
-    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/yellowbird-upflap.png", racine);
+    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/redbird-upflap.png", racine);
     DUAL_Texture_LoadFromFile(resourceManager, chemin_absolu, DUAL_FILTER_LINEAR, &bird_up);
 
     snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/background-day.png", racine);
@@ -107,10 +105,10 @@ void my_init(INCLUDES_FONCTIONS) {
     snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/message.png", racine);
     DUAL_Texture_LoadFromFile(resourceManager, chemin_absolu, DUAL_FILTER_LINEAR, &menu);
 
-    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/bottom.png", racine);
+    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/button_pressed.png", racine);
     DUAL_Texture_LoadFromFile(resourceManager, chemin_absolu, DUAL_FILTER_LINEAR, &bottom);
 
-    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/bottom_button.png", racine);
+    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/button.png", racine);
     DUAL_Texture_LoadFromFile(resourceManager, chemin_absolu, DUAL_FILTER_LINEAR, &bottom_buttom);
 
     snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/sprites/gameover.png", racine);
@@ -121,12 +119,6 @@ void my_init(INCLUDES_FONCTIONS) {
 
     snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/audio/wing.wav", racine);
     DUAL_Sound_LoadFromFile(audioManager, resourceManager, chemin_absolu, &soundWing);
-
-    snprintf(chemin_absolu, sizeof(chemin_absolu), "%s/assets/arial.ttf", racine);
-    if (DUAL_Font_LoadFromFile(resourceManager, chemin_absolu, 80, &font) != DUAL_OK){
-        DUAL_Log(DUAL_LOG_ERROR, "Erreur de chargement du font");
-        font = NULL;
-    }
 
     int w = 0, h = 0;
 
@@ -442,13 +434,14 @@ void my_draw(INCLUDES_FONCTIONS) {
     DUAL_SetActiveScreen(app, DUAL_SCREEN_BOTTOM);
     DUAL_Renderer2D_Begin(renderer2D);
 
-    affichage_bas(PARAMS_FONCTIONS);
-
     if (!gameStarted && !gameOver) {
         affichage_menu(PARAMS_FONCTIONS);
     }
     else if (gameOver) {
         affichage_gameover(PARAMS_FONCTIONS);
+    }
+    else {
+        affichage_bas(PARAMS_FONCTIONS);
     }
 
     DUAL_Renderer2D_End(renderer2D);
@@ -468,9 +461,6 @@ void my_shutdown(INCLUDES_FONCTIONS) {
     if (bottom_buttom)   DUAL_Texture_Destroy(resourceManager, bottom_buttom);
     if (gameoverTexture) DUAL_Texture_Destroy(resourceManager, gameoverTexture);
 
-    // Libération de la police
-    if (font)            DUAL_Font_Destroy(resourceManager, font);
-
     // Libération des fichiers sons statiques
     if (soundHit)        DUAL_Sound_Destroy(resourceManager, soundHit);
     if (soundWing)       DUAL_Sound_Destroy(resourceManager, soundWing);
@@ -485,7 +475,6 @@ void my_shutdown(INCLUDES_FONCTIONS) {
     bottom = NULL;
     bottom_buttom = NULL;
     gameoverTexture = NULL;
-    font = NULL;
     soundHit = NULL;
     soundWing = NULL;
 }

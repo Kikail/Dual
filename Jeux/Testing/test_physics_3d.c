@@ -17,6 +17,8 @@
 #include "DUAL_Graphics/particle_system.h"
 #include "DUAL_Physics/dual_physics.h"
 
+#define MODEL_FIRETRUCK_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/cars/OBJ format/firetruck.obj"
+#define TEXTURE_DEFAULT_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/default_texture.png"
 
 int main() {
     DUAL_Log(DUAL_LOG_INFO, "Test Graphics 2D started !");
@@ -54,6 +56,18 @@ int main() {
     int projectionMode = 0;
     int rendererMode = 0;
 
+    // On initialise les ressources
+    DUAL_Model* ambulanceModel = NULL;
+    DUAL_Material** materials = NULL;
+    unsigned int materialCount = 0;
+    result = DUAL_Model_Load(resourceManager, MODEL_FIRETRUCK_PATH, &ambulanceModel, &materialCount, &materials);
+    DEBUG_DUAL_RESULT(result);
+
+    // On charge une texture de test
+    DUAL_Texture* texture = NULL;
+    result = DUAL_Texture_LoadFromFile(resourceManager, TEXTURE_DEFAULT_PATH, DUAL_FILTER_NEAREST, &texture);
+    DEBUG_DUAL_RESULT(result);
+
     DUAL_PhysicsWorld* physicsWorld = DUAL_PhysicsWorld_Create((DUAL_Vec3){0.0,-9.81,0.0});
     DUAL_RigidBody body;
     body.masse = 1.0;
@@ -61,15 +75,19 @@ int main() {
     body.position = (DUAL_Vec3){-10.0, 0.0, 60.0};
     body.collider.type = DUAL_COLLIDER_AABB;
     body.vitesse = (DUAL_Vec3){15.0, 10.0, 0.0};
-    body.collider.shape.aabb = (DUAL_AABB){(DUAL_Vec3){-5.0,-5.0,-5.0},(DUAL_Vec3){5.0,5.0,5.0}};
+    body.collider.shape.aabb = DUAL_Model_GetBoundingBox(ambulanceModel);
+    body.collider.shape.aabb.min = DUAL_Vec3_Scale(body.collider.shape.aabb.min, 3.0);
+    body.collider.shape.aabb.max = DUAL_Vec3_Scale(body.collider.shape.aabb.max, 3.0);
 
     DUAL_RigidBody body2;
     body2.masse = 1.0;
     body2.est_statique = false;
     body2.position = (DUAL_Vec3){10.0, 0.0, 60.0};
-    body2.collider.type = DUAL_COLLIDER_SPHERE;
-    body2.vitesse = (DUAL_Vec3){-5.0, 25.0, 0.0};
-    body2.collider.shape.sphere = (DUAL_Sphere){(DUAL_Vec3){0.0,0.0,0.0}, 3.0};
+    body2.collider.type = DUAL_COLLIDER_AABB;
+    body2.vitesse = (DUAL_Vec3){-7.0, 15.0, 0.0};
+    body2.collider.shape.aabb = DUAL_Model_GetBoundingBox(ambulanceModel);
+    body2.collider.shape.aabb.min = DUAL_Vec3_Scale(body2.collider.shape.aabb.min, 3.0);
+    body2.collider.shape.aabb.max = DUAL_Vec3_Scale(body2.collider.shape.aabb.max, 3.0);
 
     DUAL_PhysicsWorld_AddBody(physicsWorld, body);
     DUAL_PhysicsWorld_AddBody(physicsWorld, body2);
@@ -88,6 +106,29 @@ int main() {
 
     double oldx = 0, oldy = 0;
     bool firstMouse = false;
+
+    DUAL_Renderer3D_SetRenderMode(renderer3D, DUAL_RENDER_UNLIT);
+    // On change la couleur ambiante
+    DUAL_Renderer3D_SetAmbientLight(renderer3D, (DUAL_Vec3){0.3,0.3,0.45});
+    DUAL_Light light = {
+        .type = DUAL_LIGHT_POINT,
+        .position = {3.0,0.0,-2.5},
+        .couleur = {1.0,0.3,0.3},
+        .direction = {0.0,0.0,0.0},
+        .intensite = 0.5,
+        10
+    };
+    DUAL_Light sun = {
+        .type = DUAL_LIGHT_DIRECTIONAL,
+        .position = {3.0,0.0,-2.5},
+        .couleur = {0.9,0.9,0.9},
+        .direction = {0.0,-1.0,-0.3},
+        .intensite = 0.6
+    };
+    DUAL_Renderer3D_SetLight(renderer3D, 0, light);
+    DUAL_Renderer3D_SetLight(renderer3D, 1, sun);
+
+    DUAL_Renderer3D_SetCullMode(renderer3D, DUAL_CULL_BACK);
 
     // Boucle du jeu principal
     while (DUAL_ShouldRun(app)) {
@@ -147,14 +188,12 @@ int main() {
         DUAL_Renderer3D_Begin(renderer3D);
 
         for (int k = 0; k < physicsWorld->count_bodies; k++) {
-            switch (physicsWorld->bodies[k].collider.type) {
-                case DUAL_COLLIDER_AABB:
-                    DUAL_Debug_DrawAABB(renderer3D, DUAL_GetGlobalAABB(&physicsWorld->bodies[k]), DUAL_VEC3_COLOR_GREEN);
-                    break;
-                case DUAL_COLLIDER_SPHERE:
-                    DUAL_Debug_DrawSphere(renderer3D, DUAL_GetGlobalSphere(&physicsWorld->bodies[k]), DUAL_VEC3_COLOR_GREEN);
-                    break;
-            }
+            DUAL_Transform3D transform;
+            transform.position = physicsWorld->bodies[k].position;
+            transform.rotation_euler_radians = (DUAL_Vec3){0.0,M_PI,0.0};
+            float taille = 3.0;
+            transform.echelle = (DUAL_Vec3){taille, taille, taille};
+            DUAL_DrawModel(renderer3D, ambulanceModel, materials, transform);
         }
 
         DUAL_Renderer3D_End(renderer3D);

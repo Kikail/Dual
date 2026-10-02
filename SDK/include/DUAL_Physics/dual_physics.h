@@ -94,6 +94,7 @@ DUAL_CollisionInfo DUAL_Collide_AABBVSAABB(const DUAL_AABB* a, const DUAL_AABB* 
 DUAL_CollisionInfo DUAL_Collide_SphereVSAABB(const DUAL_Sphere* sphere, const DUAL_AABB* aabb);
 DUAL_CollisionInfo DUAL_Collide_CapsuleVSSphere(const DUAL_Capsule* capsule, const DUAL_Sphere* sphere);
 DUAL_CollisionInfo DUAL_Collide_CapsuleVSAABB(const DUAL_Capsule* capsule, const DUAL_AABB* aabb);
+DUAL_CollisionInfo DUAL_Collide_CapsuleVSCapsule(const DUAL_Capsule* capsule1, const DUAL_Capsule* capsule2);
 
 DUAL_AABB DUAL_GetGlobalAABB(DUAL_RigidBody* body);
 DUAL_Sphere DUAL_GetGlobalSphere(DUAL_RigidBody* body);
