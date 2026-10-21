@@ -44,6 +44,7 @@ set(MOTEUR_SOURCES
         SDK/src/DUAL_Graphics/camera2d.c
         SDK/src/DUAL_Graphics/particle_system.c
         SDK/src/DUAL_Graphics/shader.c
+        SDK/src/DUAL_Graphics/dual_ui.c
         SDK/src/DUAL_Resources/dual_resources.c
         SDK/src/DUAL_Audio/dual_audio.c
         SDK/src/DUAL_FS/dual_fs.c
@@ -66,6 +67,7 @@ set(SDK_SOURCES
         SDK/src/DUAL_Graphics/camera2d.c
         SDK/src/DUAL_Graphics/particle_system.c
         SDK/src/DUAL_Graphics/shader.c
+        SDK/src/DUAL_Graphics/dual_ui.c
         SDK/src/DUAL_Resources/dual_resources.c
         SDK/src/DUAL_Audio/dual_audio.c
         SDK/src/DUAL_FS/dual_fs.c
@@ -205,3 +207,11 @@ target_include_directories(testing_scene_loader PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
 target_link_libraries(testing_scene_loader PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
+
+# Test Scene Loader
+add_executable(test_ui Jeux/Testing/test_ui.c ${SDK_SOURCES})
+target_include_directories(test_ui PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
+)
+target_link_libraries(test_ui PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)

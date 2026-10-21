@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 /* Déclaration externe des fonctions d'accès du module core */
 extern void* DUAL_Internal_GetGLFWWindow(const DUAL_App* app);
@@ -26,6 +27,8 @@ struct DUAL_InputManager {
     /* Données du Stick Analogique */
     DUAL_Vec2 joystick_axes;
     float     joystick_deadzone;
+
+    DUAL_TextInputBuffer text_buffer_input;
     
     /* Données de l'Écran Tactile */
     DUAL_TouchState touch_current;
@@ -75,6 +78,12 @@ DUAL_Result DUAL_InputManager_Create(DUAL_App* app, DUAL_InputManager** out_inpu
     input->was_touching_last_frame = false;
 
     input->layout = DUAL_GetScreenLayout(app);
+
+    text_input_init(&input->text_buffer_input);
+    strcpy(input->text_buffer_input.data, "Editeur Dual");
+    input->text_buffer_input.length = strlen(input->text_buffer_input.data);
+    input->text_buffer_input.cursor_pos = input->text_buffer_input.length;
+    setup_text_input_callbacks(input->window, &input->text_buffer_input);
 
     *out_input = input;
     return DUAL_OK;
@@ -250,3 +259,121 @@ bool DUAL_IsTouching(const DUAL_InputManager* input) {
             input->touch_current.phase == DUAL_TOUCH_MOVED ||
             input->touch_current.phase == DUAL_TOUCH_HELD);
 }
+
+
+
+
+
+void text_input_init(DUAL_TextInputBuffer* input) {
+    memset(input->data, 0, MAX_INPUT_SIZE);
+    input->cursor_pos = 0;
+    input->length = 0;
+    input->active = true;
+}
+
+void text_input_move_cursor(DUAL_TextInputBuffer* input, int direction) {
+    input->cursor_pos += direction;
+    if (input->cursor_pos < 0) {
+        input->cursor_pos = 0;
+    }
+    if (input->cursor_pos > input->length) {
+        input->cursor_pos = input->length;
+    }
+}
+
+void text_input_insert_char(DUAL_TextInputBuffer* input, char c) {
+    if (input->length >= MAX_INPUT_SIZE - 1) return;
+
+    for (int i = input->length; i > input->cursor_pos; i--) {
+        input->data[i] = input->data[i - 1];
+    }
+
+    input->data[input->cursor_pos] = c;
+    input->cursor_pos++;
+    input->length++;
+    input->data[input->length] = '\0';
+}
+
+void text_input_backspace(DUAL_TextInputBuffer* input) {
+    if (input->cursor_pos <= 0) return; // Rien à supprimer au début
+
+    for (int i = input->cursor_pos - 1; i < input->length; i++) {
+        input->data[i] = input->data[i + 1];
+    }
+
+    input->cursor_pos--;
+    input->length--;
+}
+
+void character_callback(GLFWwindow* window, unsigned int codepoint) {
+    DUAL_TextInputBuffer* input = (DUAL_TextInputBuffer*)glfwGetWindowUserPointer(window);
+
+    if (!input->active) return;
+
+    if (codepoint >= 32 && codepoint < 128) {
+        text_input_insert_char(input, (char)codepoint);
+    }
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    DUAL_TextInputBuffer* input = (DUAL_TextInputBuffer*)glfwGetWindowUserPointer(window);
+
+    if (!input->active) return;
+
+    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+        if (key == GLFW_KEY_BACKSPACE) {
+            text_input_backspace(input);
+        } else if (key == GLFW_KEY_LEFT) {
+            text_input_move_cursor(input, -1);
+        } else if (key == GLFW_KEY_RIGHT) {
+            text_input_move_cursor(input, 1);
+        }
+    }
+}
+
+void setup_text_input_callbacks(GLFWwindow* window, DUAL_TextInputBuffer* input) {
+    glfwSetWindowUserPointer(window, input);
+    glfwSetCharCallback(window, character_callback);
+    glfwSetKeyCallback(window, key_callback);
+}
+
+char* get_buffer_data(DUAL_InputManager* input) {
+    return input->text_buffer_input.data;
+}
+bool is_buffer_active(DUAL_InputManager* input) {
+    return input->text_buffer_input.active;
+}
+void set_buffer_data_active(DUAL_InputManager* input, bool active) {
+    input->text_buffer_input.active = active;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

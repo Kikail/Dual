@@ -87,6 +87,14 @@ typedef struct DUAL_TouchState {
     DUAL_Vec2       position; /**< Position du contact, en coordonnées écran (pixels). */
 } DUAL_TouchState;
 
+#define MAX_INPUT_SIZE 256
+typedef struct {
+    char data[MAX_INPUT_SIZE];
+    int cursor_pos;
+    int length;
+    bool active;
+} DUAL_TextInputBuffer;
+
 /* ============================================================================
  *  Cycle de vie du gestionnaire
  * ========================================================================== */
@@ -196,6 +204,17 @@ DUAL_TouchState DUAL_GetTouchState(const DUAL_InputManager* input);
  * @return true si un contact tactile est actif, false sinon.
  */
 bool DUAL_IsTouching(const DUAL_InputManager* input);
+
+void text_input_init(DUAL_TextInputBuffer* input);
+void text_input_move_cursor(DUAL_TextInputBuffer* input, int direction);
+void text_input_insert_char(DUAL_TextInputBuffer* input, char c);
+void text_input_backspace(DUAL_TextInputBuffer* input) ;
+void character_callback(GLFWwindow* window, unsigned int codepoint);
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+void setup_text_input_callbacks(GLFWwindow* window, DUAL_TextInputBuffer* input);
+char* get_buffer_data(DUAL_InputManager* input);
+bool is_buffer_active(DUAL_InputManager* input);
+void set_buffer_data_active(DUAL_InputManager* input, bool active);
 
 #ifdef __cplusplus
 }
