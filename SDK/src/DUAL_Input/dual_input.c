@@ -1,0 +1,379 @@
+#include "../../include/DUAL_Input/dual_input.h"
+#include <GLFW/glfw3.h>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
+
+/* Déclaration externe des fonctions d'accès du module core */
+extern void* DUAL_Internal_GetGLFWWindow(const DUAL_App* app);
+extern void  DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h);
+
+/* ============================================================================
+ * Définition de la structure opaque du Gestionnaire d'Inputs
+ * ========================================================================== */
+struct DUAL_InputManager {
+    GLFWwindow* window;             /* Handle de la fenêtre GLFW */
+    int32_t     largeur_ecran;       /* Dimensions nominales d'un écran */
+    int32_t     hauteur_ecran;
+    DUAL_ScreenLayout layout;
+    
+    /* Tableaux d'états pour les boutons (Frame courante vs Frame précédente) */
+    bool current_buttons[DUAL_BUTTON_COUNT];
+    bool previous_buttons[DUAL_BUTTON_COUNT];
+    
+    /* Tableaux de correspondance Clavier PC -> Boutons Console */
+    int mapping_clavier[DUAL_BUTTON_COUNT];
+    
+    /* Données du Stick Analogique */
+    DUAL_Vec2 joystick_axes;
+    float     joystick_deadzone;
+
+    DUAL_TextInputBuffer text_buffer_input;
+    
+    /* Données de l'Écran Tactile */
+    DUAL_TouchState touch_current;
+    bool            was_touching_last_frame;
+};
+
+/* ============================================================================
+ * Cycle de vie du gestionnaire
+ * ========================================================================== */
+
+DUAL_Result DUAL_InputManager_Create(DUAL_App* app, DUAL_InputManager** out_input) {
+    if (!app || !out_input) return DUAL_ERROR_INVALID_ARG;
+
+    DUAL_InputManager* input = (DUAL_InputManager*)malloc(sizeof(struct DUAL_InputManager));
+    if (!input) return DUAL_ERROR_OUT_OF_MEMORY;
+
+    /* Récupération des informations de la fenêtre */
+    input->window = (GLFWwindow*)DUAL_Internal_GetGLFWWindow(app);
+    DUAL_Internal_GetScreenDimensions(app, &input->largeur_ecran, &input->hauteur_ecran);
+
+    /* Initialisation des états par défaut */
+    for (int i = 0; i < DUAL_BUTTON_COUNT; i++) {
+        input->current_buttons[i] = false;
+        input->previous_buttons[i] = false;
+    }
+
+    input->mapping_clavier[DUAL_BUTTON_A]      = GLFW_KEY_X;           /* X pour valider */
+    input->mapping_clavier[DUAL_BUTTON_B]      = GLFW_KEY_C;           /* C pour annuler */
+    input->mapping_clavier[DUAL_BUTTON_X]      = GLFW_KEY_V;           /* Anciennement S : entrait en conflit avec le stick */
+    input->mapping_clavier[DUAL_BUTTON_Y]      = GLFW_KEY_B;           /* Anciennement D : entrait en conflit avec le stick */
+    input->mapping_clavier[DUAL_BUTTON_L]      = GLFW_KEY_A;           /* Gâchettes en haut à gauche/droite du stick */
+    input->mapping_clavier[DUAL_BUTTON_R]      = GLFW_KEY_E;           /* Anciennement Z : entrait en conflit avec le stick */
+    input->mapping_clavier[DUAL_BUTTON_START]  = GLFW_KEY_ENTER;
+    input->mapping_clavier[DUAL_BUTTON_SELECT] = GLFW_KEY_RIGHT_SHIFT;
+    input->mapping_clavier[DUAL_BUTTON_UP]     = GLFW_KEY_UP;          /* Croix directionnelle */
+    input->mapping_clavier[DUAL_BUTTON_DOWN]   = GLFW_KEY_DOWN;
+    input->mapping_clavier[DUAL_BUTTON_LEFT]   = GLFW_KEY_LEFT;
+    input->mapping_clavier[DUAL_BUTTON_RIGHT]  = GLFW_KEY_RIGHT;
+
+    input->joystick_axes.x = 0.0f;
+    input->joystick_axes.y = 0.0f;
+    input->joystick_deadzone = 0.15f; /* 15% de zone morte par défaut */
+
+    input->touch_current.phase = DUAL_TOUCH_NONE;
+    input->touch_current.position.x = 0.0f;
+    input->touch_current.position.y = 0.0f;
+    input->was_touching_last_frame = false;
+
+    input->layout = DUAL_GetScreenLayout(app);
+
+    text_input_init(&input->text_buffer_input);
+    strcpy(input->text_buffer_input.data, "Editeur Dual");
+    input->text_buffer_input.length = strlen(input->text_buffer_input.data);
+    input->text_buffer_input.cursor_pos = input->text_buffer_input.length;
+    setup_text_input_callbacks(input->window, &input->text_buffer_input);
+
+    *out_input = input;
+    return DUAL_OK;
+}
+
+void DUAL_InputManager_Destroy(DUAL_InputManager* input) {
+    if (input) {
+        free(input);
+    }
+}
+void Update_Mouse(DUAL_InputManager* input) {
+    if (!input) return;
+
+    double souris_x, souris_y;
+    glfwGetCursorPos(input->window, &souris_x, &souris_y);
+    bool clic_souris = (glfwGetMouseButton(input->window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+
+    bool est_dans_ecran_tactile = false;
+    float local_x = 0.0f;
+    float local_y = 0.0f;
+
+    switch (input->layout) {
+        case DUAL_LAYOUT_HORIZONTAL_SPLIT:
+            // Écran du BAS : Y dans GLFW va de hauteur_ecran à (hauteur_ecran * 2)
+            if (souris_x >= 0 && souris_x < input->largeur_ecran &&
+                souris_y >= input->hauteur_ecran && souris_y < (input->hauteur_ecran * 2)) {
+                est_dans_ecran_tactile = true;
+                local_x = (float)souris_x;
+                local_y = (float)(souris_y - input->hauteur_ecran);
+            }
+            break;
+
+        case DUAL_LAYOUT_VERTICAL_SPLIT:
+            // Écran de GAUCHE (ou DROITE selon la logique tactile) : Y va de 0 à hauteur_ecran
+            // Ici configuré pour l'écran de GAUCHE (0 à largeur_ecran)
+            if (souris_x >= 0 && souris_x < input->largeur_ecran &&
+                souris_y >= 0 && souris_y < input->hauteur_ecran) {
+                est_dans_ecran_tactile = true;
+                local_x = (float)souris_x;
+                local_y = (float)souris_y;
+            }
+            break;
+
+        case DUAL_LAYOUT_NO_SPLIT:
+        default:
+            // Écran unique : toute la fenêtre
+            if (souris_x >= 0 && souris_x < input->largeur_ecran &&
+                souris_y >= 0 && souris_y < input->hauteur_ecran) {
+                est_dans_ecran_tactile = true;
+                local_x = (float)souris_x;
+                local_y = (float)souris_y;
+            }
+            break;
+    }
+
+    // Gestion des états du touch
+    if (clic_souris && est_dans_ecran_tactile) {
+        if (!input->was_touching_last_frame) {
+            input->touch_current.phase = DUAL_TOUCH_STARTED;
+        } else {
+            if (local_x != input->touch_current.position.x || local_y != input->touch_current.position.y) {
+                input->touch_current.phase = DUAL_TOUCH_MOVED;
+            } else {
+                input->touch_current.phase = DUAL_TOUCH_HELD;
+            }
+        }
+        input->touch_current.position.x = local_x;
+        input->touch_current.position.y = local_y;
+        input->was_touching_last_frame = true;
+    } else {
+        if (input->was_touching_last_frame) {
+            input->touch_current.phase = DUAL_TOUCH_ENDED;
+            input->was_touching_last_frame = false;
+        } else {
+            input->touch_current.phase = DUAL_TOUCH_NONE;
+        }
+    }
+}
+void DUAL_InputManager_Update(DUAL_InputManager* input) {
+    if (!input || !input->window) return;
+
+    /* 0. RAFRAÎCHISSEMENT DE L'ÉTAT GLFW
+     *
+     * glfwGetKey()/glfwGetMouseButton() ne renvoient l'état réel du matériel
+     * que si la file d'événements GLFW a été traitée récemment. Si l'appli
+     * appelle déjà glfwPollEvents() ailleurs (typiquement dans
+     * DUAL_BeginFrame()), cet appel est un simple no-op sans effet de bord
+     * néfaste. En revanche, si ce n'est pas le cas, son absence est la cause
+     * la plus fréquente d'un état de touche qui semble "figé" (donc lu comme
+     * enfoncé en continu) : ce module ne doit pas dépendre d'un appel externe
+     * pour fonctionner correctement. */
+    glfwPollEvents();
+
+    /* 1. MISE À JOUR DES BOUTONS PHYSIQUES */
+    for (int i = 0; i < DUAL_BUTTON_COUNT; i++) {
+        input->previous_buttons[i] = input->current_buttons[i];
+        int code_touche = input->mapping_clavier[i];
+        input->current_buttons[i] = (glfwGetKey(input->window, code_touche) == GLFW_PRESS);
+    }
+
+    /* 2. MISE À JOUR DU STICK ANALOGIQUE (Simulé ici par les touches ZQSD / WASD) */
+    float stick_x = 0.0f;
+    float stick_y = 0.0f;
+    if (glfwGetKey(input->window, GLFW_KEY_D) == GLFW_PRESS) stick_x += 1.0f;
+    if (glfwGetKey(input->window, GLFW_KEY_Q) == GLFW_PRESS) stick_x -= 1.0f;
+    if (glfwGetKey(input->window, GLFW_KEY_Z) == GLFW_PRESS) stick_y += 1.0f;
+    if (glfwGetKey(input->window, GLFW_KEY_S) == GLFW_PRESS) stick_y -= 1.0f;
+
+    /* Application mathématique de la zone morte */
+    float longueur_stick = sqrtf(stick_x * stick_x + stick_y * stick_y);
+    if (longueur_stick < input->joystick_deadzone) {
+        input->joystick_axes.x = 0.0f;
+        input->joystick_axes.y = 0.0f;
+    } else {
+        /* Normalisation si le vecteur dépasse 1.0 */
+        if (longueur_stick > 1.0f) {
+            stick_x /= longueur_stick;
+            stick_y /= longueur_stick;
+        }
+        input->joystick_axes.x = stick_x;
+        input->joystick_axes.y = stick_y;
+    }
+
+    Update_Mouse(input);
+}
+
+/* ============================================================================
+ * Fonctions de requêtes d'état (API Publique)
+ * ========================================================================== */
+
+bool DUAL_IsButtonDown(const DUAL_InputManager* input, DUAL_Button bouton) {
+    /* (int) force une comparaison signée : selon le compilateur, un enum dont
+     * toutes les valeurs sont positives peut être représenté par un type non
+     * signé, ce qui rendrait "bouton < 0" toujours faux et masquerait un appel
+     * invalide (ex: cast direct d'un -1). */
+    if (!input || (int)bouton < 0 || bouton >= DUAL_BUTTON_COUNT) return false;
+    return input->current_buttons[bouton];
+}
+
+bool DUAL_IsButtonPressed(const DUAL_InputManager* input, DUAL_Button bouton) {
+    if (!input || (int)bouton < 0 || bouton >= DUAL_BUTTON_COUNT) return false;
+    return (input->current_buttons[bouton] && !input->previous_buttons[bouton]);
+}
+
+bool DUAL_IsButtonReleased(const DUAL_InputManager* input, DUAL_Button bouton) {
+    if (!input || (int)bouton < 0 || bouton >= DUAL_BUTTON_COUNT) return false;
+    return (!input->current_buttons[bouton] && input->previous_buttons[bouton]);
+}
+
+DUAL_Vec2 DUAL_GetJoystickAxis(const DUAL_InputManager* input, DUAL_JoystickID joystick) {
+    DUAL_Vec2 v_zero = {0.0f, 0.0f};
+    if (!input || joystick != DUAL_JOYSTICK_PRINCIPAL) return v_zero;
+    return input->joystick_axes;
+}
+
+void DUAL_SetJoystickDeadzone(DUAL_InputManager* input, DUAL_JoystickID joystick, float taille_zone_morte) {
+    if (input && joystick == DUAL_JOYSTICK_PRINCIPAL) {
+        if (taille_zone_morte >= 0.0f && taille_zone_morte <= 1.0f) {
+            input->joystick_deadzone = taille_zone_morte;
+        }
+    }
+}
+
+DUAL_TouchState DUAL_GetTouchState(const DUAL_InputManager* input) {
+    DUAL_TouchState t_none = {DUAL_TOUCH_NONE, {0.0f, 0.0f}};
+    if (!input) return t_none;
+    return input->touch_current;
+}
+
+bool DUAL_IsTouching(const DUAL_InputManager* input) {
+    if (!input) return false;
+    return (input->touch_current.phase == DUAL_TOUCH_STARTED ||
+            input->touch_current.phase == DUAL_TOUCH_MOVED ||
+            input->touch_current.phase == DUAL_TOUCH_HELD);
+}
+
+
+
+
+
+void text_input_init(DUAL_TextInputBuffer* input) {
+    memset(input->data, 0, MAX_INPUT_SIZE);
+    input->cursor_pos = 0;
+    input->length = 0;
+    input->active = true;
+}
+
+void text_input_move_cursor(DUAL_TextInputBuffer* input, int direction) {
+    input->cursor_pos += direction;
+    if (input->cursor_pos < 0) {
+        input->cursor_pos = 0;
+    }
+    if (input->cursor_pos > input->length) {
+        input->cursor_pos = input->length;
+    }
+}
+
+void text_input_insert_char(DUAL_TextInputBuffer* input, char c) {
+    if (input->length >= MAX_INPUT_SIZE - 1) return;
+
+    for (int i = input->length; i > input->cursor_pos; i--) {
+        input->data[i] = input->data[i - 1];
+    }
+
+    input->data[input->cursor_pos] = c;
+    input->cursor_pos++;
+    input->length++;
+    input->data[input->length] = '\0';
+}
+
+void text_input_backspace(DUAL_TextInputBuffer* input) {
+    if (input->cursor_pos <= 0) return; // Rien à supprimer au début
+
+    for (int i = input->cursor_pos - 1; i < input->length; i++) {
+        input->data[i] = input->data[i + 1];
+    }
+
+    input->cursor_pos--;
+    input->length--;
+}
+
+void character_callback(GLFWwindow* window, unsigned int codepoint) {
+    DUAL_TextInputBuffer* input = (DUAL_TextInputBuffer*)glfwGetWindowUserPointer(window);
+
+    if (!input->active) return;
+
+    if (codepoint >= 32 && codepoint < 128) {
+        text_input_insert_char(input, (char)codepoint);
+    }
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    DUAL_TextInputBuffer* input = (DUAL_TextInputBuffer*)glfwGetWindowUserPointer(window);
+
+    if (!input->active) return;
+
+    if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+        if (key == GLFW_KEY_BACKSPACE) {
+            text_input_backspace(input);
+        } else if (key == GLFW_KEY_LEFT) {
+            text_input_move_cursor(input, -1);
+        } else if (key == GLFW_KEY_RIGHT) {
+            text_input_move_cursor(input, 1);
+        }
+    }
+}
+
+void setup_text_input_callbacks(GLFWwindow* window, DUAL_TextInputBuffer* input) {
+    glfwSetWindowUserPointer(window, input);
+    glfwSetCharCallback(window, character_callback);
+    glfwSetKeyCallback(window, key_callback);
+}
+
+char* get_buffer_data(DUAL_InputManager* input) {
+    return input->text_buffer_input.data;
+}
+bool is_buffer_active(DUAL_InputManager* input) {
+    return input->text_buffer_input.active;
+}
+void set_buffer_data_active(DUAL_InputManager* input, bool active) {
+    input->text_buffer_input.active = active;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
