@@ -15,7 +15,7 @@ struct DUAL_ResourceHandle {
     struct DUAL_ResourceHandle* next;
 };
 
-/* Déclaration de la structure opaque du Manager */
+
 struct DUAL_ResourceManager {
     DUAL_App* app;
     uint64_t vram_utilisee;
@@ -26,7 +26,7 @@ struct DUAL_ResourceManager {
     DUAL_ResourceHandle* head;
 };
 
-/* Fonction utilitaire pour copier proprement une chaîne de caractères */
+
 static char* DuplicateString(const char* src) {
     if (!src) return NULL;
     size_t len = strlen(src) + 1;
@@ -56,7 +56,6 @@ DUAL_Result DUAL_ResourceManager_Create(DUAL_App* app, DUAL_ResourceManager** ou
 void DUAL_ResourceManager_Destroy(DUAL_ResourceManager* manager) {
     if (!manager) return;
 
-    // Libère toutes les ressources encore suivies automatiquement
     DUAL_ResourceHandle* current = manager->head;
     while (current != NULL) {
         DUAL_ResourceHandle* next = current->next;

@@ -65,7 +65,7 @@ typedef struct {
 } DUAL_CollisionInfo;
 
 
-#define DUAL_PHYSICS_MAX_BODIES 100
+#define DUAL_PHYSICS_MAX_BODIES 1024
 typedef struct {
     DUAL_RigidBody bodies[DUAL_PHYSICS_MAX_BODIES];
     uint32_t count_bodies;

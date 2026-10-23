@@ -23,10 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 
-
-
-
-
+#include "dual_utils.h"
 
 
 // TODO
@@ -56,10 +53,12 @@ int main() {
     DUAL_ResourceManager_Create(app, &resourceManager);
 
     DUAL_Font* font = NULL;
-    DUAL_Font_LoadFromFile(resourceManager, "/home/killian/Documents/Assets/Fonts/test.ttf", 50, &font);
+    DUAL_Result result;
+    result = DUAL_Font_LoadFromFile(resourceManager, "/home/killian/Documents/Assets/Fonts/test.ttf", 50, &font);
+    DEBUG_DUAL_RESULT(result);
 
-    DUAL_SetScreenClearColor(app, DUAL_SCREEN_BOTTOM, DUAL_COLOR_WHITE);
-    DUAL_SetScreenClearColor(app, DUAL_SCREEN_TOP, DUAL_COLOR_WHITE);
+    DUAL_SetScreenClearColor(app, DUAL_SCREEN_BOTTOM, DUAL_COLOR_BLACK);
+    DUAL_SetScreenClearColor(app, DUAL_SCREEN_TOP, DUAL_COLOR_BLACK);
 
     DUAL_InputManager* inputManager = NULL;
     DUAL_InputManager_Create(app, &inputManager);
@@ -75,7 +74,7 @@ int main() {
             set_buffer_data_active(inputManager, !is_buffer_active(inputManager));
         }
         if (is_buffer_active(inputManager)) {
-            DUAL_DrawText(renderer2d, font, get_buffer_data(inputManager), (DUAL_Vec2){100.0, 100.0}, DUAL_COLOR_BLACK);
+            DUAL_DrawText(renderer2d, font, get_buffer_data(inputManager), (DUAL_Vec2){100.0, 100.0}, DUAL_COLOR_WHITE);
         }
 
         DUAL_Renderer2D_End(renderer2d);

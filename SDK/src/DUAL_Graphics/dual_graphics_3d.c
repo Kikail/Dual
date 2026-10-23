@@ -82,13 +82,10 @@ struct DUAL_Renderer3D {
 
     GLuint ubo_bones;
 
-    /* État de rendu */
     DUAL_RenderMode3D render_mode;
 
-    /* Caméra */
     DUAL_Camera3D camera;
 
-    /* Projection */
     DUAL_ProjectionMode3D projection_mode;
     DUAL_Mat4 perspective_projection;
     DUAL_Mat4 orthographic_projection;
@@ -97,27 +94,23 @@ struct DUAL_Renderer3D {
     float plan_proche;
     float plan_lointain;
 
-    /* Culling */
     DUAL_CullMode cull_mode;
 
-    /* Éclairage */
     DUAL_Vec3  ambient_light;
     DUAL_Light lights[DUAL_MAX_LIGHTS_3D];
 
-    /* Billboard */
     GLuint billboard_vbo, billboard_vao;
 
-    /* Debug Gizmos */
     DUAL_DebugRenderer3D debug_renderer;
 };
 
-/* --- OPTIMISATION : Réduction de la taille des vertices --- */
+
 typedef struct {
     DUAL_Vec3 position;
     DUAL_Vec3 normale;
     DUAL_Vec2 tex_coords;
     float   m_Weights[MAX_BONE_INFLUENCE];
-    int32_t m_BoneIDs[MAX_BONE_INFLUENCE]; // Utiliser int32_t pour un ivec4 parfait
+    int32_t m_BoneIDs[MAX_BONE_INFLUENCE];
 } Vertex3D;
 
 /* ============================================================================
@@ -629,7 +622,7 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     renderer->fov_radians = 1.0471975512f;
     renderer->ortho_demi_hauteur = 5.0f;
     renderer->plan_proche = 0.1f;
-    renderer->plan_lointain = 100.0f;
+    renderer->plan_lointain = 500.0f;
 
     int32_t w = 0, h = 0;
     DUAL_Internal_GetScreenDimensions(renderer->app, &w, &h);
@@ -961,7 +954,7 @@ void DUAL_Debug_DrawAABB(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Vec3 color)
 }
 
 void DUAL_Debug_DrawSphere(DUAL_Renderer3D* debug, DUAL_Sphere sphere, DUAL_Vec3 color) {
-    const int segments = 16; // Nombre de lignes par cercle (16 est un très bon compromis perf/visuel)
+    const int segments = 16;
     const float step = (2.0f * M_PI) / (float)segments;
 
     for (int i = 0; i < segments; i++) {
@@ -971,7 +964,6 @@ void DUAL_Debug_DrawSphere(DUAL_Renderer3D* debug, DUAL_Sphere sphere, DUAL_Vec3
         float cos1 = cosf(theta1), sin1 = sinf(theta1);
         float cos2 = cosf(theta2), sin2 = sinf(theta2);
 
-        // 1. Cercle horizontal (Plan XZ)
         DUAL_Vec3 xz1 = {
             sphere.centre.x + sphere.rayon * cos1,
             sphere.centre.y,
@@ -984,7 +976,6 @@ void DUAL_Debug_DrawSphere(DUAL_Renderer3D* debug, DUAL_Sphere sphere, DUAL_Vec3
         };
         DUAL_Debug_DrawLine(debug, xz1, xz2, color);
 
-        // 2. Cercle vertical (Plan XY)
         DUAL_Vec3 xy1 = {
             sphere.centre.x + sphere.rayon * cos1,
             sphere.centre.y + sphere.rayon * sin1,
@@ -997,7 +988,6 @@ void DUAL_Debug_DrawSphere(DUAL_Renderer3D* debug, DUAL_Sphere sphere, DUAL_Vec3
         };
         DUAL_Debug_DrawLine(debug, xy1, xy2, color);
 
-        // 3. Cercle vertical (Plan YZ)
         DUAL_Vec3 yz1 = {
             sphere.centre.x,
             sphere.centre.y + sphere.rayon * cos1,

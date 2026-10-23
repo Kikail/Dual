@@ -1,14 +1,3 @@
-/**
- * @file dual_audio.h
- * @brief Module audio de libdual : effets sonores chargés intégralement en
- * RAM et musiques diffusées en streaming depuis le système de fichiers.
- *
- * Backend : miniaudio (ma_engine). Les DUAL_Sound sont joués en mode
- * "fire-and-forget" via un pool interne d'instances ma_sound gérées par
- * le DUAL_AudioManager ; l'appelant ne récupère jamais de handle d'instance.
- * Les DUAL_Music sont des flux uniques (streaming disque) que l'appelant
- * pilote directement (Play/Pause/Stop/Seek).
- */
 
 #ifndef DUAL_AUDIO_H
 #define DUAL_AUDIO_H

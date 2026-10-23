@@ -8,18 +8,15 @@
 #include "../../include/DUAL_Graphics/dual_graphics_2d.h"
 #include "../../include/DUAL_Math/dual_math.h"
 
-/* Configuration et inclusion de STB Image */
+
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_THREAD_LOCAL
 #include "stb_image.h"
 
-/* Configuration et inclusion de STB Truetype */
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 #include "../../include/DUAL_Graphics/camera2d.h"
 #include "../../include/DUAL_Graphics/shader.h"
-
-/* Déclarations externes pour interroger la configuration de l'écran */
 extern void DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h);
 
 /* ============================================================================

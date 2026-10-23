@@ -2,248 +2,239 @@
 // Created by killian on 9/25/26.
 //
 #include "../../include/DUAL_Physics/dual_physics.h"
-
 #include <stdlib.h>
-
+#include <math.h>
 #include "DUAL_Core/dual_core.h"
 
 DUAL_PhysicsWorld* DUAL_PhysicsWorld_Create(DUAL_Vec3 gravite) {
     DUAL_PhysicsWorld* world = malloc(sizeof(DUAL_PhysicsWorld));
-
     world->count_bodies = 0;
     world->gravite = gravite;
     world->terrain = NULL;
-
     return world;
 }
+
 void DUAL_PhysicsWorld_Destroy(DUAL_PhysicsWorld* world) {
     free(world);
 }
+
 void DUAL_internal_PhysicsBody_Step(DUAL_RigidBody* body, DUAL_Vec3 gravity, float dt) {
-    DUAL_Vec3 acceleration = DUAL_Vec3_Scale(body->forces, 1.0 / body->masse);
+    if (body->est_statique || !body->actif) return;
+
+    DUAL_Vec3 acceleration = DUAL_Vec3_Scale(body->forces, body->masse_inverse);
     acceleration = DUAL_Vec3_Add(acceleration, gravity);
+
     body->vitesse.x += acceleration.x * dt;
     body->vitesse.y += acceleration.y * dt;
     body->vitesse.z += acceleration.z * dt;
+
     body->position.x += body->vitesse.x * dt;
     body->position.y += body->vitesse.y * dt;
     body->position.z += body->vitesse.z * dt;
-    body->forces = (DUAL_Vec3){0.0,0.0,0.0};
+
+    body->forces = (DUAL_Vec3){0.0f, 0.0f, 0.0f};
 }
+
 DUAL_AABB DUAL_GetGlobalAABB(DUAL_RigidBody* body) {
     DUAL_AABB new_AABB = body->collider.shape.aabb;
     new_AABB.min = DUAL_Vec3_Add(new_AABB.min, body->position);
     new_AABB.max = DUAL_Vec3_Add(new_AABB.max, body->position);
     return new_AABB;
 }
+
 DUAL_Sphere DUAL_GetGlobalSphere(DUAL_RigidBody* body) {
     DUAL_Sphere sphere = body->collider.shape.sphere;
     sphere.centre = DUAL_Vec3_Add(sphere.centre, body->position);
     return sphere;
 }
+
 void DUAL_PhysicsWorld_Step(DUAL_PhysicsWorld* world, float dt) {
-    // On calcule toutes les positions
+    // 1. Intégration du mouvement
     for (int i = 0; i < world->count_bodies; i++) {
         DUAL_RigidBody* body = &world->bodies[i];
-        if (body->est_statique) continue;
         DUAL_internal_PhysicsBody_Step(body, world->gravite, dt);
     }
 
-    // On resout les collisions
+    // 2. Détection et résolution des collisions
     for (int i = 0; i < world->count_bodies; i++) {
         for (int j = i + 1; j < world->count_bodies; j++) {
             DUAL_RigidBody* body1 = &world->bodies[i];
             DUAL_RigidBody* body2 = &world->bodies[j];
 
-            DUAL_CollisionInfo info;
+            if (!body1->actif || !body2->actif) continue;
+            if (body1->est_statique && body2->est_statique) continue;
+
+            DUAL_CollisionInfo info = {0};
+
+            // AABB vs AABB
             if (body1->collider.type == DUAL_COLLIDER_AABB && body2->collider.type == DUAL_COLLIDER_AABB) {
-                DUAL_AABB new_AABB_1 = body1->collider.shape.aabb;
-                new_AABB_1.min = DUAL_Vec3_Add(new_AABB_1.min, body1->position);
-                new_AABB_1.max = DUAL_Vec3_Add(new_AABB_1.max, body1->position);
-
-                DUAL_AABB new_AABB_2 = body2->collider.shape.aabb;
-                new_AABB_2.min = DUAL_Vec3_Add(new_AABB_2.min, body2->position);
-                new_AABB_2.max = DUAL_Vec3_Add(new_AABB_2.max, body2->position);
-
-                info = DUAL_Collide_AABBVSAABB(&new_AABB_1, &new_AABB_2);
+                DUAL_AABB box1 = DUAL_GetGlobalAABB(body1);
+                DUAL_AABB box2 = DUAL_GetGlobalAABB(body2);
+                info = DUAL_Collide_AABBVSAABB(&box1, &box2);
             }
+            // AABB1 vs SPHERE2
             else if (body1->collider.type == DUAL_COLLIDER_AABB && body2->collider.type == DUAL_COLLIDER_SPHERE) {
-                DUAL_AABB new_AABB_1 = body1->collider.shape.aabb;
-                new_AABB_1.min = DUAL_Vec3_Add(new_AABB_1.min, body1->position);
-                new_AABB_1.max = DUAL_Vec3_Add(new_AABB_1.max, body1->position);
-
-                DUAL_Sphere new_Sphere_1 = body2->collider.shape.sphere;
-                new_Sphere_1.centre = DUAL_Vec3_Add(new_Sphere_1.centre, body2->position);
-
-                info = DUAL_Collide_SphereVSAABB(&new_Sphere_1, &new_AABB_1);
+                DUAL_AABB box1 = DUAL_GetGlobalAABB(body1);
+                DUAL_Sphere sphere2 = DUAL_GetGlobalSphere(body2);
+                info = DUAL_Collide_SphereVSAABB(&sphere2, &box1);
             }
-            else if (body2->collider.type == DUAL_COLLIDER_AABB && body1->collider.type == DUAL_COLLIDER_SPHERE) {
-                DUAL_AABB new_AABB_1 = body2->collider.shape.aabb;
-                new_AABB_1.min = DUAL_Vec3_Add(new_AABB_1.min, body2->position);
-                new_AABB_1.max = DUAL_Vec3_Add(new_AABB_1.max, body2->position);
-
-                DUAL_Sphere new_Sphere_1 = body1->collider.shape.sphere;
-                new_Sphere_1.centre = DUAL_Vec3_Add(new_Sphere_1.centre, body1->position);
-
-                info = DUAL_Collide_SphereVSAABB(&new_Sphere_1, &new_AABB_1);
+            // SPHERE1 vs AABB2
+            else if (body1->collider.type == DUAL_COLLIDER_SPHERE && body2->collider.type == DUAL_COLLIDER_AABB) {
+                DUAL_Sphere sphere1 = DUAL_GetGlobalSphere(body1);
+                DUAL_AABB box2 = DUAL_GetGlobalAABB(body2);
+                info = DUAL_Collide_SphereVSAABB(&sphere1, &box2);
+                info.normal = DUAL_Vec3_Scale(info.normal, -1.0f); // Inversion pour garder le bon sens body1 -> body2
             }
+            // SPHERE vs SPHERE
             else if (body1->collider.type == DUAL_COLLIDER_SPHERE && body2->collider.type == DUAL_COLLIDER_SPHERE) {
-                DUAL_Sphere new_Sphere_1 = body1->collider.shape.sphere;
-                new_Sphere_1.centre = DUAL_Vec3_Add(new_Sphere_1.centre, body1->position);
-
-                DUAL_Sphere new_Sphere_2 = body2->collider.shape.sphere;
-                new_Sphere_2.centre = DUAL_Vec3_Add(new_Sphere_2.centre, body2->position);
-
-                info = DUAL_Collide_SphereVSSphere(&new_Sphere_1, &new_Sphere_2);
+                DUAL_Sphere sphere1 = DUAL_GetGlobalSphere(body1);
+                DUAL_Sphere sphere2 = DUAL_GetGlobalSphere(body2);
+                info = DUAL_Collide_SphereVSSphere(&sphere1, &sphere2);
             }
-            else {
-                // Pas defini pour le moment on garde ces states pour les capsules et height map
-            }
-            // Si on trouve une collision on les repousse
-            if (info.collision) {
-                // On les empeche de se chevaucher
-                float total_mass = body1->masse + body2->masse;
-                if (total_mass == 0.0f) return;
-                float w_a = body2->masse / total_mass;
-                float w_b = body1->masse / total_mass;
-                body1->position = DUAL_Vec3_Sub(body1->position, DUAL_Vec3_Scale(info.normal, info.penetration * w_a));
-                body2->position = DUAL_Vec3_Add(body2->position, DUAL_Vec3_Scale(info.normal, info.penetration * w_b));
 
-                // On "inverse" la vitesse pour les repousser selon une restitution
+            if (info.collision && info.penetration > 0.0001f) {
+                float inv_mass_a = body1->est_statique ? 0.0f : body1->masse_inverse;
+                float inv_mass_b = body2->est_statique ? 0.0f : body2->masse_inverse;
+                float total_inv_mass = inv_mass_a + inv_mass_b;
+
+                if (total_inv_mass == 0.0f) continue;
+
+                DUAL_Vec3 separation = DUAL_Vec3_Scale(info.normal, info.penetration);
+                if (!body1->est_statique) {
+                    body1->position = DUAL_Vec3_Sub(body1->position, DUAL_Vec3_Scale(separation, inv_mass_a / total_inv_mass));
+                }
+                if (!body2->est_statique) {
+                    body2->position = DUAL_Vec3_Add(body2->position, DUAL_Vec3_Scale(separation, inv_mass_b / total_inv_mass));
+                }
+
                 DUAL_Vec3 relative_velocity = DUAL_Vec3_Sub(body2->vitesse, body1->vitesse);
                 float vel_along_normal = DUAL_Vec3_Dot(relative_velocity, info.normal);
-                if (vel_along_normal == 0.0f) return;
-                float e = 1.0; // restitution
-                float inv_mass_sum = body1->masse_inverse + body2->masse_inverse;
-                if (inv_mass_sum == 0.0f) return;
+
+                // Ne pas résoudre si les objets s'éloignent déjà
+                if (vel_along_normal > 0.0f) continue;
+
+                float e = 0.5f; // Coefficient de restitution
                 float j = -(1.0f + e) * vel_along_normal;
-                j /= inv_mass_sum;
+                j /= total_inv_mass;
+
                 DUAL_Vec3 impulse = DUAL_Vec3_Scale(info.normal, j);
 
                 if (!body1->est_statique) {
-                    body1->vitesse = DUAL_Vec3_Sub(body1->vitesse, DUAL_Vec3_Scale(impulse, body1->masse_inverse));
+                    body1->vitesse = DUAL_Vec3_Sub(body1->vitesse, DUAL_Vec3_Scale(impulse, inv_mass_a));
                 }
                 if (!body2->est_statique) {
-                    body2->vitesse = DUAL_Vec3_Add(body2->vitesse, DUAL_Vec3_Scale(impulse, body2->masse_inverse));
+                    body2->vitesse = DUAL_Vec3_Add(body2->vitesse, DUAL_Vec3_Scale(impulse, inv_mass_b));
                 }
             }
         }
     }
 }
+
 int32_t DUAL_PhysicsWorld_AddBody(DUAL_PhysicsWorld* world, DUAL_RigidBody body) {
-    if (world->count_bodies < DUAL_PHYSICS_MAX_BODIES) {
-        DUAL_RigidBody* world_body = &world->bodies[world->count_bodies];
-        *world_body = body;
-        world_body->masse_inverse = 1.0 / body.masse;
-        world_body->forces = (DUAL_Vec3){0.0, 0.0, 0.0};
-        world_body->actif = true;
-        return world->count_bodies++;
+    if (body.est_statique) {
+        body.masse_inverse = 0.0f;
+    } else {
+        body.masse_inverse = (body.masse > 0.0f) ? (1.0f / body.masse) : 0.0f;
     }
-    else {
+    body.forces = (DUAL_Vec3){0.0f, 0.0f, 0.0f};
+    body.actif = true;
+
+    if (world->count_bodies < DUAL_PHYSICS_MAX_BODIES) {
+        world->bodies[world->count_bodies] = body;
+        return world->count_bodies++;
+    } else {
         for (int i = 0; i < DUAL_PHYSICS_MAX_BODIES; i++) {
             if (!world->bodies[i].actif) {
                 world->bodies[i] = body;
-                world->bodies[i].actif = true;
-                world->bodies[i].masse_inverse = 1.0 / world->bodies[i].masse;
                 return i;
             }
         }
     }
+    return -1;
 }
+
 void DUAL_PhysicsWorld_RemoveBody(DUAL_PhysicsWorld* world, int32_t body_id) {
-    world->bodies[body_id].actif = false;
+    if (body_id >= 0 && body_id < DUAL_PHYSICS_MAX_BODIES) {
+        world->bodies[body_id].actif = false;
+    }
 }
+
 void DUAL_PhysicsWorld_SetHeightmap(DUAL_PhysicsWorld* world, DUAL_Heightmap* terrain) {
     world->terrain = terrain;
 }
 
 DUAL_CollisionInfo DUAL_Collide_SphereVSSphere(const DUAL_Sphere* a, const DUAL_Sphere* b) {
-    DUAL_CollisionInfo info;
-    DUAL_Vec3 ba = DUAL_Vec3_Sub(b->centre, a->centre);
-    float length = DUAL_Vec3_Length(ba);
-    info.collision = length < a->rayon + b->rayon;
-    info.normal = DUAL_Vec3_Normalize(ba);
-    info.penetration = length - (a->rayon + b->rayon);
+    DUAL_CollisionInfo info = {0};
+    DUAL_Vec3 ab = DUAL_Vec3_Sub(b->centre, a->centre);
+    float dist_sq = DUAL_Vec3_Dot(ab, ab);
+    float radius_sum = a->rayon + b->rayon;
+
+    if (dist_sq < radius_sum * radius_sum) {
+        float distance = sqrtf(dist_sq);
+        info.collision = true;
+        if (distance > 0.0001f) {
+            info.normal = DUAL_Vec3_Scale(ab, 1.0f / distance);
+        } else {
+            info.normal = (DUAL_Vec3){0.0f, 1.0f, 0.0f};
+        }
+        info.penetration = radius_sum - distance;
+    }
     return info;
 }
 
 DUAL_CollisionInfo DUAL_Collide_SphereVSAABB(const DUAL_Sphere* sphere, const DUAL_AABB* aabb) {
-    DUAL_CollisionInfo info;
+    DUAL_CollisionInfo info = {0};
 
     DUAL_Vec3 p;
-    // Clamping sur X
-    if (sphere->centre.x < aabb->min.x) p.x = aabb->min.x;
-    else if (sphere->centre.x > aabb->max.x) p.x = aabb->max.x;
-    else p.x = sphere->centre.x;
+    p.x = DUAL_Clamp(sphere->centre.x, aabb->min.x, aabb->max.x);
+    p.y = DUAL_Clamp(sphere->centre.y, aabb->min.y, aabb->max.y);
+    p.z = DUAL_Clamp(sphere->centre.z, aabb->min.z, aabb->max.z);
 
-    if (sphere->centre.y < aabb->min.y)p.y = aabb->min.y;
-    else if (sphere->centre.y > aabb->max.y)p.y = aabb->max.y;
-    else p.y = sphere->centre.y;
+    DUAL_Vec3 diff = DUAL_Vec3_Sub(sphere->centre, p);
+    float dist_sq = DUAL_Vec3_Dot(diff, diff);
 
-    if (sphere->centre.z < aabb->min.z)p.z = aabb->min.z;
-    else if (sphere->centre.z > aabb->max.z)p.z = aabb->max.z;
-    else p.z = sphere->centre.z;
-
-    float distance = DUAL_Vec3_Distance(p, sphere->centre);
-    if (distance* distance <= sphere->rayon * sphere->rayon) {
+    if (dist_sq <= sphere->rayon * sphere->rayon) {
+        float distance = sqrtf(dist_sq);
         info.collision = true;
-        info.normal = DUAL_Vec3_Normalize(DUAL_Vec3_Sub(sphere->centre, p));
         info.penetration = sphere->rayon - distance;
+        if (distance > 0.0001f) {
+            info.normal = DUAL_Vec3_Scale(diff, 1.0f / distance);
+        } else {
+            info.normal = (DUAL_Vec3){0.0f, 1.0f, 0.0f};
+        }
     }
-    else {
-        info.collision = false;
-    }
-
     return info;
 }
-
 
 DUAL_CollisionInfo DUAL_Collide_AABBVSAABB(const DUAL_AABB* a, const DUAL_AABB* b) {
-    DUAL_CollisionInfo info;
+    DUAL_CollisionInfo info = {0};
 
-    float offsetx = DUAL_Min(a->max.x, b->max.x) - DUAL_Max(a->min.x, b->min.x);
-    if (offsetx < 0) {
-        info.collision = false;
-        return info;
-    }
+    float overlap_x = DUAL_Min(a->max.x, b->max.x) - DUAL_Max(a->min.x, b->min.x);
+    if (overlap_x <= 0.0f) return info;
 
-    float offsety = DUAL_Min(a->max.y, b->max.y) - DUAL_Max(a->min.y, b->min.y);
-    if (offsety < 0) {
-        info.collision = false;
-        return info;
-    }
+    float overlap_y = DUAL_Min(a->max.y, b->max.y) - DUAL_Max(a->min.y, b->min.y);
+    if (overlap_y <= 0.0f) return info;
 
-    float offsetz = DUAL_Min(a->max.z, b->max.z) - DUAL_Max(a->min.z, b->min.z);
-    if (offsetz < 0) {
-        info.collision = false;
-        return info;
-    }
+    float overlap_z = DUAL_Min(a->max.z, b->max.z) - DUAL_Max(a->min.z, b->min.z);
+    if (overlap_z <= 0.0f) return info;
 
     info.collision = true;
-    if (offsetx < offsety && offsetx < offsetz) {
-        info.normal = (DUAL_Vec3){1.0f, 0.0f, 0.0f};
-        info.penetration = offsetx;
-    }
-    else if (offsety < offsetz && offsety < offsetx) {
-        info.normal = (DUAL_Vec3){0.0f, 1.0f, 0.0f};
-        info.penetration = offsety;
-    }
-    else if (offsetz < offsetx && offsetz < offsety) {
-        info.normal = (DUAL_Vec3){0.0f, 0.0f, 1.0f};
-        info.penetration = offsetz;
-    }
-    else {
-        info.normal = (DUAL_Vec3){0.0f, 0.0f, 0.0f};
-        info.penetration = 0.0;
-    }
 
-    return info;
-}
+    // Trouver l'axe de plus petite pénétration (axe de séparation minimal)
+    DUAL_Vec3 center_a = DUAL_Vec3_Scale(DUAL_Vec3_Add(a->min, a->max), 0.5f);
+    DUAL_Vec3 center_b = DUAL_Vec3_Scale(DUAL_Vec3_Add(b->min, b->max), 0.5f);
+    DUAL_Vec3 dir = DUAL_Vec3_Sub(center_b, center_a);
 
-DUAL_CollisionInfo DUAL_Collide_CapsuleVSCapsule(const DUAL_Capsule* capsule1, const DUAL_Capsule* capsule2) {
-    DUAL_CollisionInfo info;
-
-
+    if (overlap_x < overlap_y && overlap_x < overlap_z) {
+        info.penetration = overlap_x;
+        info.normal = (dir.x < 0.0f) ? (DUAL_Vec3){-1.0f, 0.0f, 0.0f} : (DUAL_Vec3){1.0f, 0.0f, 0.0f};
+    } else if (overlap_y < overlap_z) {
+        info.penetration = overlap_y;
+        info.normal = (dir.y < 0.0f) ? (DUAL_Vec3){0.0f, -1.0f, 0.0f} : (DUAL_Vec3){0.0f, 1.0f, 0.0f};
+    } else {
+        info.penetration = overlap_z;
+        info.normal = (dir.z < 0.0f) ? (DUAL_Vec3){0.0f, 0.0f, -1.0f} : (DUAL_Vec3){0.0f, 0.0f, 1.0f};
+    }
 
     return info;
 }
@@ -251,6 +242,7 @@ DUAL_CollisionInfo DUAL_Collide_CapsuleVSCapsule(const DUAL_Capsule* capsule1, c
 void DUAL_Debug_PrintAABB(DUAL_AABB aabb) {
     DUAL_Log(DUAL_LOG_DEBUG, "min:(%f %f %f), max:(%f %f %f)", aabb.min.x, aabb.min.y, aabb.min.z, aabb.max.x, aabb.max.y, aabb.max.z);
 }
+
 void DUAL_Debug_PrintBody(DUAL_RigidBody* body) {
-    DUAL_Log(DUAL_LOG_DEBUG, "position:(%f %f %f), vitesse(%f %f %f), forces(%f %f %f)", body->position.x, body->position.y, body->position.z, body->vitesse.x,body->vitesse.y,body->vitesse.z, body->forces.x,body->forces.y,body->forces.z);
+    DUAL_Log(DUAL_LOG_DEBUG, "position:(%f %f %f), vitesse(%f %f %f), forces(%f %f %f)", body->position.x, body->position.y, body->position.z, body->vitesse.x, body->vitesse.y, body->vitesse.z, body->forces.x, body->forces.y, body->forces.z);
 }

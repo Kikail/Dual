@@ -40,7 +40,6 @@ void DUAL_Camera3D_ProcessMouseMovement(DUAL_Camera3D* cam, float xoffset, float
     cam->yaw   += xoffset;
     cam->pitch += yoffset;
 
-    // update Front, Right and Up Vectors using the updated Euler angles
     DUAL_Camera3D_UpdateCameraVectors(cam);
 }
 void DUAL_Camera3D_ProcessMouseScroll(DUAL_Camera3D* cam, float yoffset){
@@ -52,8 +51,8 @@ void DUAL_Camera3D_ProcessMouseScroll(DUAL_Camera3D* cam, float yoffset){
 }
 void DUAL_Camera3D_LookAt(DUAL_Camera3D* cam, DUAL_Vec3 target) {
     DUAL_Vec3 direction = DUAL_Vec3_Normalize(DUAL_Vec3_Sub(target, cam->position));
-    cam->pitch = asinf(direction.y) * (180.0f / 3.14159265358979323846f);
-    cam->yaw = atan2f(direction.z, direction.x) * (180.0f / 3.14159265358979323846f);
+    cam->pitch = asinf(direction.y) * (180.0f / M_PI);
+    cam->yaw = atan2f(direction.z, direction.x) * (180.0f / M_PI);
     DUAL_Camera3D_UpdateCameraVectors(cam);
 }
 void DUAL_Camera3D_UpdateCameraVectors(DUAL_Camera3D* cam) {

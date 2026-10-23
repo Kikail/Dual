@@ -14,20 +14,13 @@
  * Structures internes
  * ========================================================================== */
 
-/**
- * @brief Une entrée du pool d'instances de lecture "fire-and-forget".
- *
- * `inUse` vaut true dès qu'un slot est attribué à DUAL_Sound_Play, et
- * repasse à false lorsque l'instance est recyclée (soit parce qu'elle est
- * arrivée à la fin de sa lecture, soit parce que le DUAL_Sound source est
- * détruit pendant qu'elle joue encore).
- */
+
 typedef struct DUAL_SoundInstance {
     ma_sound sound;
-    ma_audio_buffer_ref bufferRef; /* Curseur de lecture INDEPENDANT sur les données du DUAL_Sound source ; permet à plusieurs instances de jouer le même DUAL_Sound simultanément sans se marcher dessus. */
+    ma_audio_buffer_ref bufferRef;
     bool inUse;
-    bool initialized;   /* true si ma_sound_init_* a réussi au moins une fois sur ce slot (uninit nécessaire avant réutilisation) */
-    const DUAL_Sound* source; /* Sound joué par ce slot, pour pouvoir le libérer si le Sound source est détruit avant la fin de la lecture */
+    bool initialized;
+    const DUAL_Sound* source;
 } DUAL_SoundInstance;
 
 struct DUAL_AudioManager {
@@ -45,33 +38,18 @@ struct DUAL_AudioManager {
     DUAL_SoundInstance instancePool[DUAL_MAX_SOUND_INSTANCES];
 };
 
-/**
- * @brief Un effet sonore entièrement décodé en RAM.
- *
- * pData / dataSize décrivent l'allocation brute suivie par le
- * DUAL_ResourceManager (utile pour DUAL_ResourceManager_GetStats et pour
- * libérer l'allocation à la destruction). buffer est un ma_audio_buffer
- * "maître" construit par-dessus ce même bloc mémoire (aucune copie
- * supplémentaire) ; il n'est jamais joué directement (voir le pool
- * d'instances). owningAudio référence le DUAL_AudioManager utilisé pour le
- * chargement, afin que DUAL_Sound_Destroy puisse arrêter en sécurité toute
- * instance du pool encore en train de jouer ce son avant de libérer pData.
- */
 struct DUAL_Sound {
     void* pData;
     size_t dataSize;
     ma_audio_buffer buffer;
     ma_uint32 channels;
     ma_uint32 sampleRate;
-    ma_uint64 frameCount; /* nombre de frames PCM dans pData, utilise pour initialiser un ma_audio_buffer_ref par instance de lecture */
-    bool estVoix; /* true si ce Sound doit etre route vers voiceGroup plutot que sfxGroup lors de la lecture */
-    DUAL_AudioManager* owningAudio; /* AudioManager utilise pour le chargement ; permet a DUAL_Sound_Destroy d'arreter en securite toute instance du pool encore en train de jouer ce son, sans changer la signature publique de la fonction. */
+    ma_uint64 frameCount;
+    bool estVoix;
+    DUAL_AudioManager* owningAudio;
     DUAL_ResourceHandle* resourceHandle;
 };
 
-/**
- * @brief Une musique streamée depuis le disque.
- */
 struct DUAL_Music {
     ma_sound sound;
     bool initialized;
@@ -90,14 +68,10 @@ static ma_sound_group* DUAL_Internal_GetGroupForChannel(DUAL_AudioManager* audio
         case DUAL_CHANNEL_VOICE: return &audio->voiceGroup;
         case DUAL_CHANNEL_MASTER:
         default:
-            return NULL; /* Le canal MASTER est géré via ma_engine directement, pas via un group */
+            return NULL;
     }
 }
 
-/**
- * @brief Libère (uninit) un slot du pool s'il a déjà été initialisé, et
- *        remet son état à "libre".
- */
 static void DUAL_Internal_ReleaseInstanceSlot(DUAL_SoundInstance* slot) {
     if (!slot) return;
     if (slot->initialized) {
@@ -109,13 +83,6 @@ static void DUAL_Internal_ReleaseInstanceSlot(DUAL_SoundInstance* slot) {
     slot->source = NULL;
 }
 
-/**
- * @brief Callback interne enregistré comme "callback de destruction" auprès
- *        du DUAL_ResourceManager pour un DUAL_Sound. Permet à
- *        DUAL_ResourceManager_Destroy / PurgeAll / PurgeCategory de détruire
- *        proprement un DUAL_Sound encore tracké sans connaître le type
- *        concret.
- */
 static void DUAL_Internal_Sound_DestroyCallback(DUAL_ResourceManager* resources, void* ptr) {
     DUAL_Sound_Destroy(resources, (DUAL_Sound*)ptr);
 }
@@ -124,11 +91,6 @@ static void DUAL_Internal_Music_DestroyCallback(DUAL_ResourceManager* resources,
     DUAL_Music_Close(resources, (DUAL_Music*)ptr);
 }
 
-/* Déclarée dans dual_resources.c mais non exposée dans dual_resources.h :
- * lie un DUAL_ResourceHandle à son pointeur de ressource concret et à son
- * callback de destruction. On la redéclare ici en extern comme le fait le
- * reste du framework pour les autres modules producteurs de ressources
- * (graphics_2d / graphics_3d). */
 extern void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void* ptr_ressource, void (*callback_destruction)(DUAL_ResourceManager*, void*));
 
 /* ============================================================================
@@ -180,8 +142,6 @@ DUAL_Result DUAL_AudioManager_Create(DUAL_App* app, DUAL_AudioManager** out_audi
     }
     audio->voiceGroupInitialized = true;
 
-    /* Le pool est déjà à zéro grâce à calloc : inUse = false, initialized = false, source = NULL */
-
     *out_audio = audio;
     DUAL_Log(DUAL_LOG_INFO, "DUAL_AudioManager_Create: moteur audio initialise (pool de %d instances)", DUAL_MAX_SOUND_INSTANCES);
     return DUAL_OK;
@@ -190,7 +150,6 @@ DUAL_Result DUAL_AudioManager_Create(DUAL_App* app, DUAL_AudioManager** out_audi
 void DUAL_AudioManager_Destroy(DUAL_AudioManager* audio) {
     if (!audio) return;
 
-    /* Arrête et libère toutes les instances actives du pool */
     for (int i = 0; i < DUAL_MAX_SOUND_INSTANCES; ++i) {
         DUAL_Internal_ReleaseInstanceSlot(&audio->instancePool[i]);
     }
@@ -255,12 +214,7 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
         return DUAL_ERROR_INVALID_ARG;
     }
 
-    /* --- Étape 1 : décodage complet du fichier en un buffer PCM interleaved --- */
     ma_decoder_config decoderConfig = ma_decoder_config_init_default();
-    /* format/channels/sampleRate à 0 = "garder le format natif du fichier" ;
-       ma_engine attend cependant que la data source expose le meme format
-       que le moteur pour eviter un resampling par instance couteux. On
-       force donc le format du moteur ici. */
     decoderConfig.format     = ma_format_f32;
     decoderConfig.channels   = ma_engine_get_channels(&audio->engine);
     decoderConfig.sampleRate = ma_engine_get_sample_rate(&audio->engine);
@@ -275,9 +229,6 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
     ma_uint64 frameCount = 0;
     maResult = ma_decoder_get_length_in_pcm_frames(&decoder, &frameCount);
     if (maResult != MA_SUCCESS || frameCount == 0) {
-        /* Certains flux (notamment MP3 avec en-tetes incomplets) ne peuvent
-           pas reporter leur longueur a l'avance : on decode alors de facon
-           incrementale par blocs. */
         frameCount = 0;
     }
 
@@ -303,7 +254,6 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
             return DUAL_ERROR_INVALID_ARG;
         }
     } else {
-        /* Décodage incrémental : on ne connaît pas la longueur à l'avance. */
         const ma_uint64 CHUNK_FRAMES = 4096;
         size_t capacityFrames = CHUNK_FRAMES;
         pData = malloc((size_t)capacityFrames * bytesPerFrame);
@@ -331,7 +281,7 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
             framesDecoded += framesReadThisChunk;
 
             if (chunkResult != MA_SUCCESS || framesReadThisChunk < CHUNK_FRAMES) {
-                break; /* MA_AT_END ou fin de flux atteinte */
+                break;
             }
         }
         frameCount = framesDecoded;
@@ -347,7 +297,6 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
 
     size_t finalDataSize = (size_t)framesDecoded * bytesPerFrame;
 
-    /* --- Étape 2 : réservation du budget mémoire auprès du ResourceManager --- */
     DUAL_ResourceHandle* handle = NULL;
     DUAL_Result trackResult = DUAL_ResourceManager_Track(resources, DUAL_MEMORY_RAM, DUAL_RESOURCE_SOUND, (uint64_t)finalDataSize, chemin_fichier, &handle);
     if (trackResult != DUAL_OK) {
@@ -355,7 +304,6 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
         return trackResult;
     }
 
-    /* --- Étape 3 : allocation de la structure DUAL_Sound et construction de l'audio buffer --- */
     DUAL_Sound* sound = (DUAL_Sound*)calloc(1, sizeof(DUAL_Sound));
     if (!sound) {
         free(pData);
@@ -368,7 +316,7 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
         channels,
         framesDecoded,
         pData,
-        NULL /* pas d'allocateur : le buffer ne possede pas pData, on gere sa liberation nous-memes */
+        NULL
     );
     bufferConfig.sampleRate = sampleRate;
 
@@ -427,10 +375,7 @@ void DUAL_Sound_Destroy(DUAL_ResourceManager* resources, DUAL_Sound* sound) {
 DUAL_Result DUAL_Sound_Play(DUAL_AudioManager* audio, const DUAL_Sound* sound, float volume, float pitch) {
     if (!audio || !sound) return DUAL_ERROR_INVALID_ARG;
 
-    /* Recyclage paresseux : au cas ou DUAL_AudioManager_Update n'a pas
-       encore tourne cette frame, on nettoie les instances terminees avant
-       de chercher un slot libre, pour maximiser les chances d'en trouver
-       un. */
+
     DUAL_SoundInstance* freeSlot = NULL;
     for (int i = 0; i < DUAL_MAX_SOUND_INSTANCES; ++i) {
         DUAL_SoundInstance* slot = &audio->instancePool[i];
@@ -449,25 +394,14 @@ DUAL_Result DUAL_Sound_Play(DUAL_AudioManager* audio, const DUAL_Sound* sound, f
         return DUAL_ERROR_OUT_OF_MEMORY;
     }
 
-    /* Un slot peut avoir ete precedemment initialise pour un AUTRE son :
-       ma_sound_init_ex ne peut pas etre appele deux fois sur la meme
-       instance sans uninit prealable, et le bufferRef precedent doit lui
-       aussi etre libere avant d'en creer un nouveau. */
     if (freeSlot->initialized) {
         ma_sound_uninit(&freeSlot->sound);
         ma_audio_buffer_ref_uninit(&freeSlot->bufferRef);
         freeSlot->initialized = false;
     }
 
-    /* Routage vers le bon groupe de canal selon la nature du son (voir le
-       commentaire dans DUAL_Sound_LoadFromFile sur la detection SFX/voix). */
     ma_sound_group* targetGroup = sound->estVoix ? &audio->voiceGroup : &audio->sfxGroup;
 
-    /* IMPORTANT : on ne branche jamais directement sound->buffer (le
-       ma_audio_buffer "maitre") sur plusieurs ma_sound simultanes, car il
-       n'a qu'un seul curseur de lecture interne. On initialise a la place
-       un ma_audio_buffer_ref propre a ce slot, qui reference les memes
-       donnees/format sans copie mais avec un curseur independant. */
     ma_result maResult = ma_audio_buffer_ref_init(
         ma_format_f32,
         sound->channels,
@@ -493,7 +427,6 @@ DUAL_Result DUAL_Sound_Play(DUAL_AudioManager* audio, const DUAL_Sound* sound, f
         return DUAL_ERROR_INIT_FAILED;
     }
 
-    /* Chaque instance doit repartir du debut de sa propre reference. */
     ma_sound_seek_to_pcm_frame(&freeSlot->sound, 0);
 
     ma_sound_set_volume(&freeSlot->sound, volume);
@@ -540,11 +473,6 @@ DUAL_Result DUAL_Music_OpenFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
     music->initialized = true;
     music->boucle = false;
 
-    /* Le flux est streame depuis le disque : l'empreinte RAM reelle se
-       limite aux buffers internes de decodage de miniaudio, negligeable et
-       non mesurable simplement. On tracke neanmoins une entree symbolique
-       (taille de la structure de suivi) pour que la musique apparaisse
-       dans les statistiques et puisse etre purgee par categorie. */
     DUAL_ResourceHandle* handle = NULL;
     DUAL_Result trackResult = DUAL_ResourceManager_Track(resources, DUAL_MEMORY_RAM, DUAL_RESOURCE_MUSIC, (uint64_t)sizeof(DUAL_Music), chemin_fichier, &handle);
     if (trackResult != DUAL_OK) {
