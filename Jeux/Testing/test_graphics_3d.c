@@ -18,10 +18,10 @@
 
 #define MODEL_AMBULANCE_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/cars/OBJ format/ambulance.obj"
 #define MODEL_FIRETRUCK_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/cars/OBJ format/firetruck.obj"
-#define MODEL_CHARACTER_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/Remy.dae"
 #define TEXTURE_DEFAULT_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/default_texture.png"
-#define ANIMATION_DANCE_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/Capoeira.dae"
-#define ANIMATION_DANCE_2_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/Hip Hop Dancing.dae"
+
+#define MODEL_CUBES_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/testmodel/model_w_animations.glb"
+
 #define TEST_PATH "/home/killian/Projects/C/Dual/Jeux/resources/2D/Characters/man.png"
 
 float random_value(float min, float max) {
@@ -92,6 +92,7 @@ int main() {
     };
     DUAL_Result result = DUAL_Init(&config, &app);
     DEBUG_DUAL_RESULT(result);
+    DUAL_SetScreenClearColor(app, DUAL_SCREEN_MAIN, DUAL_COLOR_BLUE2);
 
     // On creer le resource manager
     DUAL_ResourceManager* resourceManager = NULL;
@@ -187,6 +188,21 @@ int main() {
     double oldx = 0, oldy = 0;
     bool firstMouse = false;
 
+    // Chargement du model et de son animation
+    DUAL_Animated_Model* cubes = NULL;
+    DUAL_Material* material = NULL;
+    result = DUAL_AnimatedModel_Create(resourceManager, MODEL_CUBES_PATH, &cubes);
+    DEBUG_DUAL_RESULT(result);
+;
+    result = DUAL_Material_Create(resourceManager, texture, &material);
+    DEBUG_DUAL_RESULT(result);
+
+    DUAL_Transform3D cubesTransform3D = {
+        .position = {0.0, -2.0, -5.0},
+        .echelle = {1.0, 1.0, 1.0}, // Ajustez selon la taille réelle du modèle
+        .rotation_euler_radians = {0.0, 0.0, 0.0},
+    };
+
     // Boucle du jeu principal
     while (DUAL_ShouldRun(app)) {
         DUAL_BeginFrame(app);
@@ -236,8 +252,11 @@ int main() {
                 rendererMode = 0;
             DUAL_Renderer3D_SetRenderMode(renderer3D, rendererMode);
         }
+        if (DUAL_IsButtonPressed(inputManager, DUAL_BUTTON_X)) {
+            DUAL_AnimatedModel_PlayAnimation(cubes, 1);
+        }
         ParticleSystem_Update(&particle_system, DUAL_GetDeltaTime(app));
-
+        DUAL_AnimatedModel_Update(cubes, DUAL_GetDeltaTime(app));
 
         // On selectionne l'ecran du bas
         DUAL_SetActiveScreen(app, DUAL_SCREEN_LEFT);
@@ -254,6 +273,7 @@ int main() {
         DUAL_DrawModel(renderer3D, ambulanceModel, materials, ambulanceTransform3D);
 
         for (int i = 0; i < PARTICLE_NUMBER; i++) {
+            break;
             if (particles[i].lifespan > 0) {
                 DUAL_Transform3D tmp;
                 tmp.position = particles[i].position;
@@ -261,6 +281,10 @@ int main() {
                 DUAL_DrawBillboard(renderer3D, texture, tmp, particles[i].color);
             }
         }
+
+        DUAL_Material* materials_list[] = { material };
+        DUAL_Renderer3D_UseShader(renderer3D, SHADER3D_SKELETAL_LIT);
+        DUAL_DrawAnimatedModel(renderer3D, cubes->model, materials_list, cubesTransform3D, &cubes->animator);
 
         DUAL_Renderer3D_End(renderer3D);
 

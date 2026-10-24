@@ -24,6 +24,8 @@ extern "C" {
  *  Types opaques et Déclarations
  * ========================================================================== */
 
+
+
 typedef struct DUAL_Mesh DUAL_Mesh;
 typedef struct DUAL_Model DUAL_Model;
 typedef struct DUAL_Material DUAL_Material;
@@ -147,6 +149,14 @@ typedef enum DUAL_Renderer3d_Shaders {
     SHADER3D_SHADER_DEBUG
 }DUAL_Renderer3d_Shaders;
 
+typedef struct {
+    DUAL_Model* model;
+    Animation** animations;
+    unsigned int animation_count;
+    Animator animator;
+}DUAL_Animated_Model;
+
+
 DUAL_Camera3D* DUAL_Renderer3D_GetCamera(DUAL_Renderer3D* renderer);
 
 /* ============================================================================
@@ -234,6 +244,13 @@ void DUAL_Debug_DrawAABB(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Vec3 color)
 void DUAL_Debug_DrawSphere(DUAL_Renderer3D* debug, DUAL_Sphere sphere, DUAL_Vec3 color);
 void DUAL_Debug_Render(DUAL_Renderer3D* debug, DUAL_Renderer3D* renderer);
 void DUAL_Debug_Draw_Model_BoundingBox(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Transform3D transform, DUAL_Vec3 color);
+
+
+
+DUAL_Result DUAL_AnimatedModel_Create(DUAL_ResourceManager* resources, const char* glb_path, DUAL_Animated_Model** out_animated_model);
+void DUAL_AnimatedModel_PlayAnimation(DUAL_Animated_Model* anim_model, unsigned int index);
+void DUAL_AnimatedModel_Update(DUAL_Animated_Model* anim_model, float dt);
+void DUAL_AnimatedModel_Destroy(DUAL_ResourceManager* resources, DUAL_Animated_Model* anim_model);
 
 #ifdef __cplusplus
 }

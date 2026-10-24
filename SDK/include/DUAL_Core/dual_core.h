@@ -51,6 +51,7 @@ typedef struct DUAL_Color {
 #define DUAL_COLOR_RED (DUAL_Color){1.0, 0.0, 0.0, 1.0}
 #define DUAL_COLOR_GREEN (DUAL_Color){0.0, 1.0, 0.0, 1.0}
 #define DUAL_COLOR_BLUE (DUAL_Color){0.0, 0.0, 1.0, 1.0}
+#define DUAL_COLOR_BLUE2 (DUAL_Color){0.1, 0.1, 0.75, 1.0}
 #define DUAL_COLOR_YELLOW (DUAL_Color){1.0, 1.0, 0.0, 1.0}
 #define DUAL_COLOR_MAGENTA (DUAL_Color){1.0, 0.0, 1.0, 1.0}
 #define DUAL_COLOR_CYAN (DUAL_Color){0.0, 1.0, 1.0, 1.0}

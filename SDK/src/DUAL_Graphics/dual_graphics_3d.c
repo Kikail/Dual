@@ -12,7 +12,6 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-/* Inclusion de nos modules */
 #include "../../include/DUAL_Graphics/dual_graphics_3d.h"
 #include "../../include/DUAL_Graphics/dual_graphics_2d.h"
 #include "../../include/DUAL_Graphics/shader.h"
@@ -28,10 +27,7 @@ extern GLuint DUAL_Internal_GetTextureID(const DUAL_Texture* texture);
 #define DUAL_MAX_LIGHTS_3D 4
 #define MAX_BONE_INFLUENCE 4
 #define MAX_BONES 100
-
-/* ============================================================================
- * Définition des structures opaques
- * ========================================================================== */
+#define TWO_PI_F 6.28318530718f
 
 typedef struct {
     char* name;
@@ -76,7 +72,6 @@ struct Internal_Shaders3d_s {
 struct DUAL_Renderer3D {
     DUAL_App* app;
 
-    // On creer une configuration de shaders de base dans le renderer
     DUAL_Shader* current_shader;
     struct Internal_Shaders3d_s shaders;
 
@@ -104,7 +99,6 @@ struct DUAL_Renderer3D {
     DUAL_DebugRenderer3D debug_renderer;
 };
 
-
 typedef struct {
     DUAL_Vec3 position;
     DUAL_Vec3 normale;
@@ -113,9 +107,23 @@ typedef struct {
     int32_t m_BoneIDs[MAX_BONE_INFLUENCE];
 } Vertex3D;
 
-/* ============================================================================
- * UTILITAIRES ASSIMP & BONES
- * ========================================================================== */
+#define LIGHT_UNIFORMS(i) { \
+    "uLights[" #i "].type", "uLights[" #i "].position", "uLights[" #i "].direction", \
+    "uLights[" #i "].color", "uLights[" #i "].intensity", "uLights[" #i "].range" }
+
+static const char* const kLightUniforms[DUAL_MAX_LIGHTS_3D][6] = {
+    LIGHT_UNIFORMS(0), LIGHT_UNIFORMS(1), LIGHT_UNIFORMS(2), LIGHT_UNIFORMS(3)
+};
+
+static const uint8_t kBoxEdges[12][2] = {
+    {0,1}, {1,2}, {2,3}, {3,0},
+    {4,5}, {5,6}, {6,7}, {7,4},
+    {0,4}, {1,5}, {2,6}, {3,7}
+};
+
+static inline bool NameEq(const char* a, const char* b) {
+    return a[0] == b[0] && strcmp(a, b) == 0;
+}
 
 static void SetVertexBoneDataToDefault(Vertex3D* vertex) {
     for (unsigned int i = 0; i < MAX_BONE_INFLUENCE; i++) {
@@ -129,19 +137,32 @@ static void SetVertexBoneData(Vertex3D* vertex, int boneID, float weight) {
         if (vertex->m_BoneIDs[i] < 0) {
             vertex->m_BoneIDs[i] = boneID;
             vertex->m_Weights[i] = weight;
-            break;
+            return;
         }
     }
 }
 
-static bool DoBoneInfoExist(DUAL_Model* model, const char* name, int* out_id) {
-    for (int i = 0; i < model->m_BoneCounter; i++) {
-        if (strcmp(model->m_BoneInfoMap[i].name, name) == 0) {
-            if (out_id) *out_id = model->m_BoneInfoMap[i].id;
-            return true;
-        }
+static int FindBoneID(const DUAL_Model* model, const char* name) {
+    const BoneInfo* map = model->m_BoneInfoMap;
+    for (int i = 0, n = model->m_BoneCounter; i < n; i++) {
+        if (NameEq(map[i].name, name)) return map[i].id;
     }
-    return false;
+    return -1;
+}
+
+static int RegisterBone(DUAL_Model* model, const char* name, DUAL_Mat4 offset) {
+    if (model->m_BoneCounter >= model->m_BoneMapCapacity) {
+        int capacity = model->m_BoneMapCapacity * 2;
+        BoneInfo* grown = realloc(model->m_BoneInfoMap, sizeof(BoneInfo) * capacity);
+        if (!grown) return -1;
+        model->m_BoneInfoMap = grown;
+        model->m_BoneMapCapacity = capacity;
+    }
+    int id = model->m_BoneCounter++;
+    model->m_BoneInfoMap[id].id = id;
+    model->m_BoneInfoMap[id].name = strdup(name);
+    model->m_BoneInfoMap[id].offset = offset;
+    return id;
 }
 
 static DUAL_Mat4 ConvertAssimpMatrix(const struct aiMatrix4x4* from) {
@@ -153,39 +174,22 @@ static DUAL_Mat4 ConvertAssimpMatrix(const struct aiMatrix4x4* from) {
     return to;
 }
 
-static void ExtractBoneWeightForVertices(DUAL_Model* model, Vertex3D* vertices, unsigned int nb_vertices, struct aiMesh* mesh, const struct aiScene* scene, uint32_t base_vertex) {
-    (void)nb_vertices;
-    (void)scene;
-    for (unsigned int boneIndex = 0; boneIndex < mesh->mNumBones; boneIndex++) {
-        int boneID = -1;
-        char* boneName = mesh->mBones[boneIndex]->mName.data;
+static void ExtractBoneWeightForVertices(DUAL_Model* model, Vertex3D* vertices, const struct aiMesh* mesh) {
+    for (unsigned int b = 0; b < mesh->mNumBones; b++) {
+        const struct aiBone* bone = mesh->mBones[b];
+        int boneID = FindBoneID(model, bone->mName.data);
 
-        if (!DoBoneInfoExist(model, boneName, &boneID)) {
-            if (model->m_BoneCounter >= model->m_BoneMapCapacity) {
-                model->m_BoneMapCapacity *= 2;
-                model->m_BoneInfoMap = realloc(model->m_BoneInfoMap, sizeof(BoneInfo) * model->m_BoneMapCapacity);
-            }
-
-            boneID = model->m_BoneCounter;
-            model->m_BoneInfoMap[boneID].id = boneID;
-            model->m_BoneInfoMap[boneID].name = strdup(boneName);
-            model->m_BoneInfoMap[boneID].offset = ConvertAssimpMatrix(&mesh->mBones[boneIndex]->mOffsetMatrix);
-            model->m_BoneCounter++;
+        if (boneID < 0) {
+            boneID = RegisterBone(model, bone->mName.data, ConvertAssimpMatrix(&bone->mOffsetMatrix));
+            if (boneID < 0) continue;
         }
 
-        struct aiVertexWeight* weights = mesh->mBones[boneIndex]->mWeights;
-        int numWeights = mesh->mBones[boneIndex]->mNumWeights;
-        for (int weightIndex = 0; weightIndex < numWeights; weightIndex++) {
-            int vertexId = weights[weightIndex].mVertexId + base_vertex;
-            float weight = weights[weightIndex].mWeight;
-            SetVertexBoneData(&vertices[vertexId], boneID, weight);
+        const struct aiVertexWeight* weights = bone->mWeights;
+        for (unsigned int w = 0; w < bone->mNumWeights; w++) {
+            SetVertexBoneData(&vertices[weights[w].mVertexId], boneID, weights[w].mWeight);
         }
     }
 }
-
-/* ============================================================================
- * LOGIQUE D'ANIMATION (Conservée intacte)
- * ========================================================================== */
 
 static int Bone_GetPositionIndex(Bone* bone, float animationTime) {
     for (int index = 0; index < bone->m_NumPositions - 1; ++index) {
@@ -208,38 +212,34 @@ static int Bone_GetScaleIndex(Bone* bone, float animationTime) {
     return 0;
 }
 
-static float GetScaleFactor(float lastTimeStamp, float nextTimeStamp, float animationTime) {
-    float midWayLength = animationTime - lastTimeStamp;
+static inline float GetScaleFactor(float lastTimeStamp, float nextTimeStamp, float animationTime) {
     float framesDiff = nextTimeStamp - lastTimeStamp;
     if (framesDiff <= 0.0f) return 0.0f;
-    return midWayLength / framesDiff;
+    return (animationTime - lastTimeStamp) / framesDiff;
 }
 
 static DUAL_Mat4 Bone_InterpolatePosition(Bone* bone, float animationTime) {
     if (bone->m_NumPositions == 1) return DUAL_Mat4_Translate(bone->m_Positions[0].position);
-    int p0Index = Bone_GetPositionIndex(bone, animationTime);
-    int p1Index = p0Index + 1;
-    float scaleFactor = GetScaleFactor(bone->m_Positions[p0Index].timeStamp, bone->m_Positions[p1Index].timeStamp, animationTime);
-    DUAL_Vec3 finalPos = DUAL_Vec3_Mix(bone->m_Positions[p0Index].position, bone->m_Positions[p1Index].position, scaleFactor);
-    return DUAL_Mat4_Translate(finalPos);
+    int p0 = Bone_GetPositionIndex(bone, animationTime);
+    int p1 = p0 + 1;
+    float f = GetScaleFactor(bone->m_Positions[p0].timeStamp, bone->m_Positions[p1].timeStamp, animationTime);
+    return DUAL_Mat4_Translate(DUAL_Vec3_Mix(bone->m_Positions[p0].position, bone->m_Positions[p1].position, f));
 }
 
 static DUAL_Mat4 Bone_InterpolateRotation(Bone* bone, float animationTime) {
     if (bone->m_NumRotations == 1) return DUAL_Quat_ToMat4(DUAL_Quat_Normalize(bone->m_Rotations[0].orientation));
-    int p0Index = Bone_GetRotationIndex(bone, animationTime);
-    int p1Index = p0Index + 1;
-    float scaleFactor = GetScaleFactor(bone->m_Rotations[p0Index].timeStamp, bone->m_Rotations[p1Index].timeStamp, animationTime);
-    DUAL_Quat finalRot = DUAL_Quat_Slerp(bone->m_Rotations[p0Index].orientation, bone->m_Rotations[p1Index].orientation, scaleFactor);
-    return DUAL_Quat_ToMat4(DUAL_Quat_Normalize(finalRot));
+    int p0 = Bone_GetRotationIndex(bone, animationTime);
+    int p1 = p0 + 1;
+    float f = GetScaleFactor(bone->m_Rotations[p0].timeStamp, bone->m_Rotations[p1].timeStamp, animationTime);
+    return DUAL_Quat_ToMat4(DUAL_Quat_Normalize(DUAL_Quat_Slerp(bone->m_Rotations[p0].orientation, bone->m_Rotations[p1].orientation, f)));
 }
 
 static DUAL_Mat4 Bone_InterpolateScaling(Bone* bone, float animationTime) {
     if (bone->m_NumScalings == 1) return DUAL_Mat4_Scale(bone->m_Scales[0].scale);
-    int p0Index = Bone_GetScaleIndex(bone, animationTime);
-    int p1Index = p0Index + 1;
-    float scaleFactor = GetScaleFactor(bone->m_Scales[p0Index].timeStamp, bone->m_Scales[p1Index].timeStamp, animationTime);
-    DUAL_Vec3 finalScale = DUAL_Vec3_Mix(bone->m_Scales[p0Index].scale, bone->m_Scales[p1Index].scale, scaleFactor);
-    return DUAL_Mat4_Scale(finalScale);
+    int p0 = Bone_GetScaleIndex(bone, animationTime);
+    int p1 = p0 + 1;
+    float f = GetScaleFactor(bone->m_Scales[p0].timeStamp, bone->m_Scales[p1].timeStamp, animationTime);
+    return DUAL_Mat4_Scale(DUAL_Vec3_Mix(bone->m_Scales[p0].scale, bone->m_Scales[p1].scale, f));
 }
 
 void Bone_Update(Bone* bone, float animationTime) {
@@ -250,8 +250,8 @@ void Bone_Update(Bone* bone, float animationTime) {
 }
 
 static Bone* Animation_FindBone(Animation* animation, const char* name) {
-    for (int i = 0; i < animation->m_NumBones; i++) {
-        if (strcmp(animation->m_Bones[i].m_Name, name) == 0) return &animation->m_Bones[i];
+    for (int i = 0, n = animation->m_NumBones; i < n; i++) {
+        if (NameEq(animation->m_Bones[i].m_Name, name)) return &animation->m_Bones[i];
     }
     return NULL;
 }
@@ -271,15 +271,32 @@ static void ReadHierarchyData(AssimpNodeData* dest, const struct aiNode* src) {
     }
 }
 
-DUAL_Result DUAL_Animation_Load(const char* path, DUAL_Model* model, Animation** out_animation) {
-    const struct aiScene* scene = aiImportFile(path, aiProcess_Triangulate);
-    if (!scene || !scene->mRootNode || scene->mNumAnimations == 0) {
-        if (scene) aiReleaseImport(scene);
-        return DUAL_ERROR_NOT_FOUND;
+static void FreeNodeData(AssimpNodeData* node) {
+    for (int i = 0; i < node->childrenCount; i++) {
+        FreeNodeData(&node->children[i]);
     }
+    free((void*)node->children);
+    free((void*)node->name);
+}
 
-    struct aiAnimation* aiAnim = scene->mAnimations[0];
-    Animation* anim = malloc(sizeof(Animation));
+static void FreeAnimation(Animation* anim) {
+    if (!anim) return;
+    for (int i = 0; i < anim->m_NumBones; i++) {
+        Bone* bone = &anim->m_Bones[i];
+        free((void*)bone->m_Name);
+        free(bone->m_Positions);
+        free(bone->m_Rotations);
+        free(bone->m_Scales);
+    }
+    free(anim->m_Bones);
+    FreeNodeData(&anim->m_RootNode);
+    free(anim);
+}
+
+static Animation* BuildAnimation(const struct aiScene* scene, const struct aiAnimation* aiAnim, DUAL_Model* model, bool register_missing_bones) {
+    Animation* anim = calloc(1, sizeof(Animation));
+    if (!anim) return NULL;
+
     anim->m_Duration = (float)aiAnim->mDuration;
     anim->m_TicksPerSecond = aiAnim->mTicksPerSecond != 0 ? (int)aiAnim->mTicksPerSecond : 25;
     anim->m_LinkedModel = model;
@@ -287,52 +304,60 @@ DUAL_Result DUAL_Animation_Load(const char* path, DUAL_Model* model, Animation**
     ReadHierarchyData(&anim->m_RootNode, scene->mRootNode);
 
     anim->m_NumBones = aiAnim->mNumChannels;
-    anim->m_Bones = malloc(sizeof(Bone) * anim->m_NumBones);
+    anim->m_Bones = calloc(anim->m_NumBones > 0 ? anim->m_NumBones : 1, sizeof(Bone));
 
     for (int i = 0; i < anim->m_NumBones; i++) {
-        struct aiNodeAnim* channel = aiAnim->mChannels[i];
+        const struct aiNodeAnim* channel = aiAnim->mChannels[i];
         Bone* bone = &anim->m_Bones[i];
 
         bone->m_Name = strdup(channel->mNodeName.data);
 
-        int boneID = -1;
-        if (!DoBoneInfoExist(model, bone->m_Name, &boneID)) {
-            if (model->m_BoneCounter >= model->m_BoneMapCapacity) {
-                model->m_BoneMapCapacity *= 2;
-                model->m_BoneInfoMap = realloc(model->m_BoneInfoMap, sizeof(BoneInfo) * model->m_BoneMapCapacity);
-            }
-            boneID = model->m_BoneCounter;
-            model->m_BoneInfoMap[boneID].id = boneID;
-            model->m_BoneInfoMap[boneID].name = strdup(bone->m_Name);
-            model->m_BoneInfoMap[boneID].offset = DUAL_Mat4_Identity();
-            model->m_BoneCounter++;
+        int boneID = FindBoneID(model, bone->m_Name);
+        if (boneID < 0 && register_missing_bones) {
+            boneID = RegisterBone(model, bone->m_Name, DUAL_Mat4_Identity());
         }
         bone->m_ID = boneID;
         bone->m_LocalTransform = DUAL_Mat4_Identity();
 
         bone->m_NumPositions = channel->mNumPositionKeys;
         bone->m_Positions = malloc(sizeof(KeyPosition) * bone->m_NumPositions);
-        for(int j=0; j < bone->m_NumPositions; j++) {
-            bone->m_Positions[j].position = (DUAL_Vec3){channel->mPositionKeys[j].mValue.x, channel->mPositionKeys[j].mValue.y, channel->mPositionKeys[j].mValue.z};
-            bone->m_Positions[j].timeStamp = (float)channel->mPositionKeys[j].mTime;
+        for (int j = 0; j < bone->m_NumPositions; j++) {
+            const struct aiVectorKey* k = &channel->mPositionKeys[j];
+            bone->m_Positions[j].position = (DUAL_Vec3){ k->mValue.x, k->mValue.y, k->mValue.z };
+            bone->m_Positions[j].timeStamp = (float)k->mTime;
         }
 
         bone->m_NumRotations = channel->mNumRotationKeys;
         bone->m_Rotations = malloc(sizeof(KeyRotation) * bone->m_NumRotations);
-        for(int j=0; j < bone->m_NumRotations; j++) {
-            bone->m_Rotations[j].orientation = (DUAL_Quat){channel->mRotationKeys[j].mValue.x, channel->mRotationKeys[j].mValue.y, channel->mRotationKeys[j].mValue.z, channel->mRotationKeys[j].mValue.w};
-            bone->m_Rotations[j].timeStamp = (float)channel->mRotationKeys[j].mTime;
+        for (int j = 0; j < bone->m_NumRotations; j++) {
+            const struct aiQuatKey* k = &channel->mRotationKeys[j];
+            bone->m_Rotations[j].orientation = (DUAL_Quat){ k->mValue.x, k->mValue.y, k->mValue.z, k->mValue.w };
+            bone->m_Rotations[j].timeStamp = (float)k->mTime;
         }
 
         bone->m_NumScalings = channel->mNumScalingKeys;
         bone->m_Scales = malloc(sizeof(KeyScale) * bone->m_NumScalings);
-        for(int j=0; j < bone->m_NumScalings; j++) {
-            bone->m_Scales[j].scale = (DUAL_Vec3){channel->mScalingKeys[j].mValue.x, channel->mScalingKeys[j].mValue.y, channel->mScalingKeys[j].mValue.z};
-            bone->m_Scales[j].timeStamp = (float)channel->mScalingKeys[j].mTime;
+        for (int j = 0; j < bone->m_NumScalings; j++) {
+            const struct aiVectorKey* k = &channel->mScalingKeys[j];
+            bone->m_Scales[j].scale = (DUAL_Vec3){ k->mValue.x, k->mValue.y, k->mValue.z };
+            bone->m_Scales[j].timeStamp = (float)k->mTime;
         }
     }
 
+    return anim;
+}
+
+DUAL_Result DUAL_Animation_Load(const char* path, DUAL_Model* model, Animation** out_animation) {
+    const struct aiScene* scene = aiImportFile(path, aiProcess_Triangulate);
+    if (!scene || !scene->mRootNode || scene->mNumAnimations == 0) {
+        if (scene) aiReleaseImport(scene);
+        return DUAL_ERROR_NOT_FOUND;
+    }
+
+    Animation* anim = BuildAnimation(scene, scene->mAnimations[0], model, true);
     aiReleaseImport(scene);
+    if (!anim) return DUAL_ERROR_OUT_OF_MEMORY;
+
     *out_animation = anim;
     return DUAL_OK;
 }
@@ -341,61 +366,42 @@ void Animator_Init(Animator* animator, Animation* animation) {
     animator->m_CurrentAnimation = animation;
     animator->m_CurrentTime = 0.0f;
     animator->m_DeltaTime = 0.0f;
+    const DUAL_Mat4 identity = DUAL_Mat4_Identity();
     for (int i = 0; i < MAX_BONES; i++) {
-        animator->m_FinalBoneMatrices[i] = DUAL_Mat4_Identity();
+        animator->m_FinalBoneMatrices[i] = identity;
     }
 }
 
-static void Animator_CalculateBoneTransform(Animator* animator, const AssimpNodeData* node, DUAL_Mat4 parentTransform) {
-    const char* nodeName = node->name;
+static void Animator_CalculateBoneTransform(Animator* animator, const DUAL_Model* model, const AssimpNodeData* node, DUAL_Mat4 parentTransform) {
     DUAL_Mat4 nodeTransform = node->transformation;
-    Bone* bone = Animation_FindBone(animator->m_CurrentAnimation, nodeName);
+    Bone* bone = Animation_FindBone(animator->m_CurrentAnimation, node->name);
+    int boneID = -1;
 
     if (bone) {
         Bone_Update(bone, animator->m_CurrentTime);
         nodeTransform = bone->m_LocalTransform;
+        boneID = bone->m_ID;
     }
+    if (boneID < 0) boneID = FindBoneID(model, node->name);
 
     DUAL_Mat4 globalTransformation = DUAL_Mat4_Multiply(parentTransform, nodeTransform);
 
-    DUAL_Model* model = animator->m_CurrentAnimation->m_LinkedModel;
-    for (int i = 0; i < model->m_BoneCounter; i++) {
-        if (strcmp(model->m_BoneInfoMap[i].name, nodeName) == 0) {
-            int boneID = model->m_BoneInfoMap[i].id;
-            if (boneID >= 0 && boneID < MAX_BONES) {
-                DUAL_Mat4 offset = model->m_BoneInfoMap[i].offset;
-                animator->m_FinalBoneMatrices[boneID] = DUAL_Mat4_Multiply(globalTransformation, offset);
-            }
-            break;
-        }
+    if (boneID >= 0 && boneID < MAX_BONES) {
+        animator->m_FinalBoneMatrices[boneID] = DUAL_Mat4_Multiply(globalTransformation, model->m_BoneInfoMap[boneID].offset);
     }
 
     for (int i = 0; i < node->childrenCount; i++) {
-        Animator_CalculateBoneTransform(animator, &node->children[i], globalTransformation);
+        Animator_CalculateBoneTransform(animator, model, &node->children[i], globalTransformation);
     }
 }
 
 void Animator_UpdateAnimation(Animator* animator, float dt) {
     animator->m_DeltaTime = dt;
-    if (animator->m_CurrentAnimation) {
-        animator->m_CurrentTime += animator->m_CurrentAnimation->m_TicksPerSecond * dt;
-        animator->m_CurrentTime = fmodf(animator->m_CurrentTime, animator->m_CurrentAnimation->m_Duration);
-        Animator_CalculateBoneTransform(animator, &animator->m_CurrentAnimation->m_RootNode, DUAL_Mat4_Identity());
+    Animation* animation = animator->m_CurrentAnimation;
+    if (animation) {
+        animator->m_CurrentTime = fmodf(animator->m_CurrentTime + animation->m_TicksPerSecond * dt, animation->m_Duration);
+        Animator_CalculateBoneTransform(animator, animation->m_LinkedModel, &animation->m_RootNode, DUAL_Mat4_Identity());
     }
-}
-
-static GLuint CompileShader3D(GLenum type, const char* source, DUAL_Result* out_result) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, NULL);
-    glCompileShader(shader);
-    int success;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        glGetShaderInfoLog(shader, 512, NULL, infoLog);
-        printf("[ERREUR SHADER 3D] %s\n", infoLog);
-    }
-    return shader;
 }
 
 static void ApplyCullMode3D(DUAL_CullMode mode) {
@@ -407,60 +413,75 @@ static void ApplyCullMode3D(DUAL_CullMode mode) {
     }
 }
 
-/* ============================================================================
- * GESTION ET CHARGEMENT DES MODÈLES
- * ========================================================================== */
+static DUAL_Mat4 BuildModelMatrix(const DUAL_Transform3D* transform) {
+    DUAL_Mat4 rotation = DUAL_Mat4_Identity();
+    if (transform->rotation_euler_radians.x != 0.0f) {
+        rotation = DUAL_Mat4_Rotate((DUAL_Vec3){ 1.0f, 0.0f, 0.0f }, transform->rotation_euler_radians.x);
+    }
+    if (transform->rotation_euler_radians.y != 0.0f) {
+        rotation = DUAL_Mat4_Multiply(DUAL_Mat4_Rotate((DUAL_Vec3){ 0.0f, 1.0f, 0.0f }, transform->rotation_euler_radians.y), rotation);
+    }
+    if (transform->rotation_euler_radians.z != 0.0f) {
+        rotation = DUAL_Mat4_Multiply(DUAL_Mat4_Rotate((DUAL_Vec3){ 0.0f, 0.0f, 1.0f }, transform->rotation_euler_radians.z), rotation);
+    }
+    return DUAL_Mat4_Multiply(DUAL_Mat4_Translate(transform->position),
+           DUAL_Mat4_Multiply(rotation, DUAL_Mat4_Scale(transform->echelle)));
+}
 
-DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials) {
-    if (!chemin_fichier || !out_model) return DUAL_ERROR_INVALID_ARG;
-
-    const unsigned int flags_assimp = aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_PreTransformVertices;
-    const struct aiScene* scene = aiImportFile(chemin_fichier, flags_assimp);
-
+static const struct aiScene* ImportModelScene(const char* path) {
+    const unsigned int flags = aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_GenSmoothNormals | aiProcess_FlipUVs;
+    const struct aiScene* scene = aiImportFile(path, flags);
     if (!scene || !scene->mRootNode || (scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE)) {
         if (scene) aiReleaseImport(scene);
-        return DUAL_ERROR_NOT_FOUND;
+        return NULL;
     }
+    return scene;
+}
 
-    DUAL_Model* model = malloc(sizeof(struct DUAL_Model));
-    model->handle = NULL;
+static DUAL_Result BuildModel(DUAL_ResourceManager* resources, const char* chemin_fichier, const struct aiScene* scene, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials) {
+    DUAL_Model* model = calloc(1, sizeof(struct DUAL_Model));
+    if (!model) return DUAL_ERROR_OUT_OF_MEMORY;
+
     model->mesh_count = scene->mNumMeshes;
-    model->meshes = malloc(sizeof(DUAL_Mesh) * model->mesh_count);
-
-    model->m_BoneCounter = 0;
+    model->meshes = malloc(sizeof(DUAL_Mesh) * (model->mesh_count > 0 ? model->mesh_count : 1));
     model->m_BoneMapCapacity = MAX_BONES;
     model->m_BoneInfoMap = malloc(sizeof(BoneInfo) * model->m_BoneMapCapacity);
+    model->materials = calloc(scene->mNumMaterials > 0 ? scene->mNumMaterials : 1, sizeof(DUAL_Material*));
+    model->material_count = scene->mNumMaterials;
+
+    if (!model->meshes || !model->m_BoneInfoMap || !model->materials) {
+        free(model->meshes);
+        free(model->m_BoneInfoMap);
+        free(model->materials);
+        free(model);
+        return DUAL_ERROR_OUT_OF_MEMORY;
+    }
 
     DUAL_Vec3 bb_min = {  FLT_MAX,  FLT_MAX,  FLT_MAX };
     DUAL_Vec3 bb_max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
-    model->materials = calloc(scene->mNumMaterials, sizeof(DUAL_Material*));
-    model->material_count = scene->mNumMaterials;
+    const char* last_slash = strrchr(chemin_fichier, '/');
+    const char* last_backslash = strrchr(chemin_fichier, '\\');
+    const char* last_sep = (last_slash > last_backslash) ? last_slash : last_backslash;
+    size_t dir_len = last_sep ? (size_t)(last_sep - chemin_fichier + 1) : 0;
 
     for (unsigned int i = 0; i < scene->mNumMaterials; i++) {
-        const struct aiMaterial* material = scene->mMaterials[i];
         struct aiString texPath;
-        char texPathBuffer[512] = {0};
+        if (aiGetMaterialTexture(scene->mMaterials[i], aiTextureType_DIFFUSE, 0, &texPath, NULL, NULL, NULL, NULL, NULL, NULL) != aiReturn_SUCCESS) {
+            continue;
+        }
 
-        if (aiGetMaterialTexture(material, aiTextureType_DIFFUSE, 0, &texPath, NULL, NULL, NULL, NULL, NULL, NULL) == aiReturn_SUCCESS) {
-            const char* last_slash = strrchr(chemin_fichier, '/');
-            const char* last_backslash = strrchr(chemin_fichier, '\\');
-            const char* last_sep = (last_slash > last_backslash) ? last_slash : last_backslash;
+        char texPathBuffer[512];
+        size_t len = 0;
+        if (dir_len > 0 && dir_len < sizeof(texPathBuffer)) {
+            memcpy(texPathBuffer, chemin_fichier, dir_len);
+            len = dir_len;
+        }
+        snprintf(texPathBuffer + len, sizeof(texPathBuffer) - len, "%s", texPath.data);
 
-            if (last_sep != NULL) {
-                size_t dir_len = (size_t)(last_sep - chemin_fichier + 1);
-                if (dir_len < sizeof(texPathBuffer)) {
-                    strncpy(texPathBuffer, chemin_fichier, dir_len);
-                    texPathBuffer[dir_len] = '\0';
-                }
-            }
-
-            strncat(texPathBuffer, texPath.data, sizeof(texPathBuffer) - strlen(texPathBuffer) - 1);
-
-            DUAL_Texture* texture = NULL;
-            if (DUAL_Texture_LoadFromFile(resources, texPathBuffer, DUAL_FILTER_NEAREST, &texture) == DUAL_OK) {
-                DUAL_Material_Create(resources, texture, &model->materials[i]);
-            }
+        DUAL_Texture* texture = NULL;
+        if (DUAL_Texture_LoadFromFile(resources, texPathBuffer, DUAL_FILTER_NEAREST, &texture) == DUAL_OK) {
+            DUAL_Material_Create(resources, texture, &model->materials[i]);
         }
     }
 
@@ -469,72 +490,76 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
 
     for (unsigned int m = 0; m < scene->mNumMeshes; m++) {
         const struct aiMesh* mesh = scene->mMeshes[m];
+        DUAL_Mesh* out_mesh = &model->meshes[m];
+        const unsigned int vertex_count = mesh->mNumVertices;
 
-        Vertex3D* vertices = malloc(sizeof(Vertex3D) * mesh->mNumVertices);
-        uint32_t num_indices = mesh->mNumFaces * 3;
-        uint32_t* indices = malloc(sizeof(uint32_t) * num_indices);
+        Vertex3D* vertices = malloc(sizeof(Vertex3D) * (vertex_count > 0 ? vertex_count : 1));
+        uint32_t* indices = malloc(sizeof(uint32_t) * (mesh->mNumFaces * 3 + 1));
 
-        for (unsigned int v = 0; v < mesh->mNumVertices; v++) {
-            SetVertexBoneDataToDefault(&vertices[v]);
-            DUAL_Vec3 pos = { mesh->mVertices[v].x, mesh->mVertices[v].y, mesh->mVertices[v].z };
+        const struct aiVector3D* normals = mesh->mNormals;
+        const struct aiVector3D* uvs = mesh->mTextureCoords[0];
 
-            DUAL_Vec3 normale = { 0.0f, 1.0f, 0.0f };
-            if (mesh->mNormals) {
-                normale = (DUAL_Vec3){ mesh->mNormals[v].x, mesh->mNormals[v].y, mesh->mNormals[v].z };
-            }
+        for (unsigned int v = 0; v < vertex_count; v++) {
+            Vertex3D* vertex = &vertices[v];
+            SetVertexBoneDataToDefault(vertex);
 
-            DUAL_Vec2 uv = { 0.0f, 0.0f };
-            if (mesh->mTextureCoords[0]) {
-                uv = (DUAL_Vec2){ mesh->mTextureCoords[0][v].x, mesh->mTextureCoords[0][v].y };
-            }
+            const struct aiVector3D* p = &mesh->mVertices[v];
+            vertex->position = (DUAL_Vec3){ p->x, p->y, p->z };
+            vertex->normale = normals ? (DUAL_Vec3){ normals[v].x, normals[v].y, normals[v].z } : (DUAL_Vec3){ 0.0f, 1.0f, 0.0f };
+            vertex->tex_coords = uvs ? (DUAL_Vec2){ uvs[v].x, uvs[v].y } : (DUAL_Vec2){ 0.0f, 0.0f };
 
-            vertices[v].position   = pos;
-            vertices[v].normale    = normale;
-            vertices[v].tex_coords = uv;
-
-            if (pos.x < bb_min.x) bb_min.x = pos.x; if (pos.x > bb_max.x) bb_max.x = pos.x;
-            if (pos.y < bb_min.y) bb_min.y = pos.y; if (pos.y > bb_max.y) bb_max.y = pos.y;
-            if (pos.z < bb_min.z) bb_min.z = pos.z; if (pos.z > bb_max.z) bb_max.z = pos.z;
-
-            float total_w = vertices[v].m_Weights[0] + vertices[v].m_Weights[1] + vertices[v].m_Weights[2] + vertices[v].m_Weights[3];
-            if (total_w > 0.0f) {
-                vertices[v].m_Weights[0] /= total_w;
-                vertices[v].m_Weights[1] /= total_w;
-                vertices[v].m_Weights[2] /= total_w;
-                vertices[v].m_Weights[3] /= total_w;
-            }
+            if (p->x < bb_min.x) bb_min.x = p->x;
+            if (p->x > bb_max.x) bb_max.x = p->x;
+            if (p->y < bb_min.y) bb_min.y = p->y;
+            if (p->y > bb_max.y) bb_max.y = p->y;
+            if (p->z < bb_min.z) bb_min.z = p->z;
+            if (p->z > bb_max.z) bb_max.z = p->z;
         }
 
         uint32_t index_cursor = 0;
         for (unsigned int f = 0; f < mesh->mNumFaces; f++) {
-            for (unsigned int k = 0; k < mesh->mFaces[f].mNumIndices; k++) {
-                indices[index_cursor++] = mesh->mFaces[f].mIndices[k];
+            const struct aiFace* face = &mesh->mFaces[f];
+            for (unsigned int k = 0; k < face->mNumIndices; k++) {
+                indices[index_cursor++] = face->mIndices[k];
             }
         }
 
-        ExtractBoneWeightForVertices(model, vertices, mesh->mNumVertices, (struct aiMesh*)mesh, scene, 0);
+        ExtractBoneWeightForVertices(model, vertices, mesh);
 
-        model->meshes[m].index_count = index_cursor;
-        model->meshes[m].material_index = mesh->mMaterialIndex;
+        for (unsigned int v = 0; v < vertex_count; v++) {
+            float* w = vertices[v].m_Weights;
+            float total = w[0] + w[1] + w[2] + w[3];
+            if (total > 0.0f) {
+                float inv = 1.0f / total;
+                w[0] *= inv; w[1] *= inv; w[2] *= inv; w[3] *= inv;
+            }
+        }
 
-        glGenVertexArrays(1, &model->meshes[m].vao);
-        glGenBuffers(1, &model->meshes[m].vbo);
-        glGenBuffers(1, &model->meshes[m].ebo);
+        out_mesh->index_count = index_cursor;
+        out_mesh->material_index = mesh->mMaterialIndex;
 
-        glBindVertexArray(model->meshes[m].vao);
+        glGenVertexArrays(1, &out_mesh->vao);
+        glGenBuffers(1, &out_mesh->vbo);
+        glGenBuffers(1, &out_mesh->ebo);
 
-        glBindBuffer(GL_ARRAY_BUFFER, model->meshes[m].vbo);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex3D) * mesh->mNumVertices, vertices, GL_STATIC_DRAW);
+        glBindVertexArray(out_mesh->vao);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model->meshes[m].ebo);
+        glBindBuffer(GL_ARRAY_BUFFER, out_mesh->vbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex3D) * vertex_count, vertices, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, out_mesh->ebo);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * index_cursor, indices, GL_STATIC_DRAW);
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, position)); glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, normale)); glEnableVertexAttribArray(1);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, tex_coords)); glEnableVertexAttribArray(2);
-
-        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_Weights)); glEnableVertexAttribArray(3);
-        glVertexAttribIPointer(4, 4, GL_INT, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_BoneIDs));glEnableVertexAttribArray(4);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, position));
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, normale));
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, tex_coords));
+        glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_Weights));
+        glVertexAttribIPointer(4, 4, GL_INT, sizeof(Vertex3D), (void*)offsetof(Vertex3D, m_BoneIDs));
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+        glEnableVertexAttribArray(2);
+        glEnableVertexAttribArray(3);
+        glEnableVertexAttribArray(4);
 
         glBindVertexArray(0);
 
@@ -542,12 +567,22 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
         free(indices);
     }
 
-    aiReleaseImport(scene);
     model->bounding_box_local.min = bb_min;
     model->bounding_box_local.max = bb_max;
 
     *out_model = model;
     return DUAL_OK;
+}
+
+DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials) {
+    if (!chemin_fichier || !out_model) return DUAL_ERROR_INVALID_ARG;
+
+    const struct aiScene* scene = ImportModelScene(chemin_fichier);
+    if (!scene) return DUAL_ERROR_NOT_FOUND;
+
+    DUAL_Result result = BuildModel(resources, chemin_fichier, scene, out_model, out_material_count, out_materials);
+    aiReleaseImport(scene);
+    return result;
 }
 
 void DUAL_Model_Destroy(DUAL_ResourceManager* resources, DUAL_Model* model) {
@@ -577,13 +612,8 @@ DUAL_AABB DUAL_Model_GetBoundingBox(const DUAL_Model* model) {
 }
 
 uint32_t DUAL_Model_GetMeshCount(const DUAL_Model* model) {
-    if (!model) return 0;
-    return model->mesh_count;
+    return model ? model->mesh_count : 0;
 }
-
-/* ============================================================================
- * GESTION DES MATÉRIAUX
- * ========================================================================== */
 
 DUAL_Result DUAL_Material_Create(DUAL_ResourceManager* resources, DUAL_Texture* texture_diffuse, DUAL_Material** out_material) {
     (void)resources;
@@ -598,22 +628,21 @@ DUAL_Result DUAL_Material_Create(DUAL_ResourceManager* resources, DUAL_Texture* 
 
 void DUAL_Material_Destroy(DUAL_ResourceManager* resources, DUAL_Material* material) {
     (void)resources;
-    if (material) free(material);
+    free(material);
 }
 
 DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer) {
     if (!app || !out_renderer) return DUAL_ERROR_INVALID_ARG;
-    DUAL_Renderer3D* renderer = malloc(sizeof(struct DUAL_Renderer3D));
-    memset(renderer, 0, sizeof(struct DUAL_Renderer3D));
+    DUAL_Renderer3D* renderer = calloc(1, sizeof(struct DUAL_Renderer3D));
+    if (!renderer) return DUAL_ERROR_OUT_OF_MEMORY;
     renderer->app = app;
 
-    bool compilation_result = true;
-    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_lit, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_lit_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_lit_base.fs", DUAL_SHADER_LIT);
-    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_unlit, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_unlit_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_unlit_base.fs", DUAL_SHADER_UNLIT);
-    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_skeleton, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_skeletal_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_lit_base.fs", DUAL_SHADER_LIT);
-    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_skeleton_unlit, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_skeletal_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_unlit_base.fs", DUAL_SHADER_UNLIT);
-    compilation_result = DUAL_Shader_load_VS_FS(&renderer->shaders.shader_debug, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_debug_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_debug_base.fs", DUAL_SHADER_UNLIT);
-    compilation_result = DUAL_Shader_load_VS_GEO_FS(&renderer->shaders.shader_billboard, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_billboard.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_billboard.gs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_billboard.fs", DUAL_SHADER_UNLIT);
+    DUAL_Shader_load_VS_FS(&renderer->shaders.shader_lit, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_lit_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_lit_base.fs", DUAL_SHADER_LIT);
+    DUAL_Shader_load_VS_FS(&renderer->shaders.shader_unlit, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_unlit_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_unlit_base.fs", DUAL_SHADER_UNLIT);
+    DUAL_Shader_load_VS_FS(&renderer->shaders.shader_skeleton, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_skeletal_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_lit_base.fs", DUAL_SHADER_LIT);
+    DUAL_Shader_load_VS_FS(&renderer->shaders.shader_skeleton_unlit, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_skeletal_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_unlit_base.fs", DUAL_SHADER_UNLIT);
+    DUAL_Shader_load_VS_FS(&renderer->shaders.shader_debug, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_debug_base.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_debug_base.fs", DUAL_SHADER_UNLIT);
+    DUAL_Shader_load_VS_GEO_FS(&renderer->shaders.shader_billboard, INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_billboard.vs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_billboard.gs", INTERNAL_RESOURCES_SHADERS_PATH "/i_shader_3d_billboard.fs", DUAL_SHADER_UNLIT);
 
     renderer->render_mode = DUAL_RENDER_LIT;
     renderer->camera = DUAL_Camera3D_Create((DUAL_Vec3){0.0f, 0.0f, 0.0f}, DUAL_VECTOR_UP, DUAL_VECTOR_FRONT, DUAL_CAMERA_YAW, DUAL_CAMERA_PITCH, DUAL_CAMERA_SPEED, DUAL_CAMERA_SENSIVITY, DUAL_CAMERA_ZOOM);
@@ -627,16 +656,14 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     int32_t w = 0, h = 0;
     DUAL_Internal_GetScreenDimensions(renderer->app, &w, &h);
     float aspect = (h != 0) ? ((float)w / (float)h) : 1.0f;
-    float demi_h = (renderer->ortho_demi_hauteur > 0.0f) ? renderer->ortho_demi_hauteur : 5.0f;
+    float demi_h = renderer->ortho_demi_hauteur;
     float demi_w = demi_h * aspect;
     renderer->orthographic_projection = DUAL_Mat4_Ortho(-demi_w, demi_w, -demi_h, demi_h, renderer->plan_proche, renderer->plan_lointain);
     renderer->perspective_projection = DUAL_Mat4_Perspective(renderer->fov_radians, aspect, renderer->plan_proche, renderer->plan_lointain);
 
     renderer->cull_mode = DUAL_CULL_BACK;
 
-
-    // On creer le VBO et VAO pour le billboard
-    DUAL_Vec3 billboard_point = {0.0f, 0.0f, 0.0f};
+    const DUAL_Vec3 billboard_point = {0.0f, 0.0f, 0.0f};
     glGenVertexArrays(1, &renderer->billboard_vao);
     glGenBuffers(1, &renderer->billboard_vbo);
     glBindVertexArray(renderer->billboard_vao);
@@ -645,7 +672,6 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(DUAL_Vec3), (void*)0);
     glEnableVertexAttribArray(0);
     glBindVertexArray(0);
-
 
     renderer->debug_renderer.count = 0;
     renderer->debug_renderer.capacity = DUAL_DEBUG_MAX_VERTICES;
@@ -671,6 +697,10 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
 
 void DUAL_Renderer3D_Destroy(DUAL_Renderer3D* renderer) {
     if (!renderer) return;
+    glDeleteVertexArrays(1, &renderer->billboard_vao);
+    glDeleteBuffers(1, &renderer->billboard_vbo);
+    glDeleteVertexArrays(1, &renderer->debug_renderer.vao);
+    glDeleteBuffers(1, &renderer->debug_renderer.vbo);
     free(renderer);
 }
 
@@ -713,9 +743,30 @@ void DUAL_Renderer3D_SetAmbientLight(DUAL_Renderer3D* renderer, DUAL_Vec3 couleu
     renderer->ambient_light = couleur_ambiante;
 }
 
-/* ============================================================================
- * PHASES DE RENDU
- * ========================================================================== */
+static void FlushDebugLines(DUAL_Renderer3D* debug, DUAL_Renderer3D* renderer) {
+    if (debug->debug_renderer.count == 0) return;
+
+    glBindBuffer(GL_ARRAY_BUFFER, debug->debug_renderer.vbo);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(LineVertex) * debug->debug_renderer.count, debug->debug_renderer.vertices);
+
+    DUAL_Shader* previous_shader = renderer->current_shader;
+    DUAL_Shader* shader = &renderer->shaders.shader_debug;
+    renderer->current_shader = shader;
+
+    DUAL_Shader_use(shader);
+    DUAL_Shader_setMat4(shader, "uModel", DUAL_Mat4_Identity());
+    DUAL_Shader_setMat4(shader, "uView", DUAL_Camera3D_GetViewMatrix(&renderer->camera));
+    DUAL_Shader_setMat4(shader, "uProjection", renderer->perspective_projection);
+
+    glBindVertexArray(debug->debug_renderer.vao);
+    glDrawArrays(GL_LINES, 0, (GLsizei)debug->debug_renderer.count);
+    glBindVertexArray(0);
+
+    debug->debug_renderer.count = 0;
+
+    renderer->current_shader = previous_shader;
+    if (previous_shader) DUAL_Shader_use(previous_shader);
+}
 
 void DUAL_Renderer3D_Begin(DUAL_Renderer3D* renderer) {
     if (!renderer) return;
@@ -724,102 +775,56 @@ void DUAL_Renderer3D_Begin(DUAL_Renderer3D* renderer) {
     glClear(GL_DEPTH_BUFFER_BIT);
     ApplyCullMode3D(renderer->cull_mode);
     glPolygonMode(GL_FRONT_AND_BACK, (renderer->render_mode == DUAL_RENDER_WIREFRAME) ? GL_LINE : GL_FILL);
-
-    int32_t w = 0, h = 0;
-    DUAL_Internal_GetScreenDimensions(renderer->app, &w, &h);
-    float aspect = (h != 0) ? ((float)w / (float)h) : 1.0f;
-
-    DUAL_Mat4 proj;
-    if (renderer->projection_mode == DUAL_PROJECTION_ORTHOGRAPHIC) {
-        proj = renderer->orthographic_projection;
-    } else {
-        proj = renderer->perspective_projection;
-    }
 }
 
 void DUAL_Renderer3D_End(DUAL_Renderer3D* renderer) {
     if (!renderer) return;
-
-    if (renderer->debug_renderer.count > 0) {
-        glBindBuffer(GL_ARRAY_BUFFER, renderer->debug_renderer.vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(LineVertex) * renderer->debug_renderer.count, renderer->debug_renderer.vertices);
-
-        DUAL_Shader* previous_shader = renderer->current_shader;
-
-        DUAL_Renderer3D_UseShader(renderer, SHADER3D_SHADER_DEBUG);
-        DUAL_Shader_use(renderer->current_shader);
-
-        DUAL_Shader_setMat4(renderer->current_shader, "uModel", DUAL_Mat4_Identity());
-        DUAL_Shader_setMat4(renderer->current_shader, "uView", DUAL_Camera3D_GetViewMatrix(&renderer->camera));
-        DUAL_Shader_setMat4(renderer->current_shader, "uProjection", renderer->perspective_projection);
-
-        glBindVertexArray(renderer->debug_renderer.vao);
-        glDrawArrays(GL_LINES, 0, (GLsizei)renderer->debug_renderer.count);
-        glBindVertexArray(0);
-
-        renderer->current_shader = previous_shader;
-        DUAL_Shader_use(renderer->current_shader);
-
-        renderer->debug_renderer.count = 0;
-    }
-
+    FlushDebugLines(renderer, renderer);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
-
-/* ============================================================================
- * FONCTIONS DE DESSIN
- * ========================================================================== */
 
 void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DUAL_Material** materials, DUAL_Transform3D transform, Animator* animator) {
     if (!renderer || !model) return;
 
     if (!materials) materials = (const DUAL_Material**)model->materials;
 
-    DUAL_Shader_use(renderer->current_shader);
+    DUAL_Shader* shader = renderer->current_shader;
+    DUAL_Shader_use(shader);
 
-    DUAL_Mat4 scale   = DUAL_Mat4_Scale(transform.echelle);
-    DUAL_Mat4 rot_x   = DUAL_Mat4_Rotate((DUAL_Vec3){ 1.0f, 0.0f, 0.0f }, transform.rotation_euler_radians.x);
-    DUAL_Mat4 rot_y   = DUAL_Mat4_Rotate((DUAL_Vec3){ 0.0f, 1.0f, 0.0f }, transform.rotation_euler_radians.y);
-    DUAL_Mat4 rot_z   = DUAL_Mat4_Rotate((DUAL_Vec3){ 0.0f, 0.0f, 1.0f }, transform.rotation_euler_radians.z);
-    DUAL_Mat4 trans   = DUAL_Mat4_Translate(transform.position);
-    DUAL_Mat4 modele  = DUAL_Mat4_Multiply(trans, DUAL_Mat4_Multiply(DUAL_Mat4_Multiply(rot_z, DUAL_Mat4_Multiply(rot_y, rot_x)), scale));
-
-    // On envoit les matrices au shader
-    DUAL_Shader_setMat4(renderer->current_shader, "uModel", modele);
-    DUAL_Shader_setMat4(renderer->current_shader, "uView", DUAL_Camera3D_GetViewMatrix(&renderer->camera));
-    if (renderer->projection_mode == DUAL_PROJECTION_PERSPECTIVE) {
-        DUAL_Shader_setMat4(renderer->current_shader, "uProjection", renderer->perspective_projection);
-    }
-    else {
-        DUAL_Shader_setMat4(renderer->current_shader, "uProjection", renderer->orthographic_projection);
-    }
+    DUAL_Shader_setMat4(shader, "uModel", BuildModelMatrix(&transform));
+    DUAL_Shader_setMat4(shader, "uView", DUAL_Camera3D_GetViewMatrix(&renderer->camera));
+    DUAL_Shader_setMat4(shader, "uProjection", (renderer->projection_mode == DUAL_PROJECTION_PERSPECTIVE) ? renderer->perspective_projection : renderer->orthographic_projection);
 
     if (animator) {
-        DUAL_Shader_setMat4Array(renderer->current_shader, "uFinalBonesMatrices", MAX_BONES, animator->m_FinalBoneMatrices);
+        DUAL_Shader_setMat4Array(shader, "uFinalBonesMatrices", MAX_BONES, animator->m_FinalBoneMatrices);
     }
 
-    if (renderer->current_shader->renderMode == DUAL_SHADER_LIT) {
-        DUAL_Renderer3d_SendLightInfosToShader(renderer, renderer->current_shader);
+    if (shader->renderMode == DUAL_SHADER_LIT) {
+        DUAL_Renderer3d_SendLightInfosToShader(renderer, shader);
     }
 
+    glActiveTexture(GL_TEXTURE0);
+    glUniform1i(glGetUniformLocation(shader->shaderID, "texture_diffuse"), 0);
+
+    GLuint last_texture = (GLuint)~0u;
     for (uint32_t i = 0; i < model->mesh_count; i++) {
-        const DUAL_Material* material = NULL;
-        uint32_t mat_idx = model->meshes[i].material_index;
+        const DUAL_Mesh* mesh = &model->meshes[i];
+        GLuint texture = 0;
 
-        if (materials && mat_idx < model->material_count) {
-            material = materials[mat_idx];
+        if (mesh->material_index < model->material_count) {
+            const DUAL_Material* material = materials[mesh->material_index];
+            if (material && material->texture_diffuse) {
+                texture = DUAL_Internal_GetTextureID(material->texture_diffuse);
+            }
         }
 
-        if (material && material->texture_diffuse) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, DUAL_Internal_GetTextureID(material->texture_diffuse));
-            glUniform1i(glGetUniformLocation(renderer->current_shader->shaderID, "texture_diffuse"), 0);
-        } else {
-            glBindTexture(GL_TEXTURE_2D, 0);
+        if (texture != last_texture) {
+            glBindTexture(GL_TEXTURE_2D, texture);
+            last_texture = texture;
         }
 
-        glBindVertexArray(model->meshes[i].vao);
-        glDrawElements(GL_TRIANGLES, (GLsizei)model->meshes[i].index_count, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(mesh->vao);
+        glDrawElements(GL_TRIANGLES, (GLsizei)mesh->index_count, GL_UNSIGNED_INT, 0);
     }
     glBindVertexArray(0);
 }
@@ -828,33 +833,26 @@ void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, 
     if (!renderer || !texture) return;
 
     DUAL_Shader* previous_shader = renderer->current_shader;
+    DUAL_Shader* shader = &renderer->shaders.shader_billboard;
+    renderer->current_shader = shader;
+    DUAL_Shader_use(shader);
 
-    renderer->current_shader = &renderer->shaders.shader_billboard;
-    DUAL_Shader_use(renderer->current_shader);
-
-    // Désactivation du Cull Face pour éviter que le Quad ne soit ignoré
     glDisable(GL_CULL_FACE);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, DUAL_Internal_GetTextureID(texture));
-    glUniform1i(glGetUniformLocation(renderer->current_shader->shaderID, "texture_diffuse"), 0);
+    glUniform1i(glGetUniformLocation(shader->shaderID, "texture_diffuse"), 0);
 
-    DUAL_Mat4 vp = DUAL_Mat4_Multiply(renderer->perspective_projection, DUAL_Camera3D_GetViewMatrix(&renderer->camera));
-    DUAL_Shader_setMat4(renderer->current_shader, "uVP", vp);
-
-    DUAL_Shader_setVec3(renderer->current_shader, "uCameraPos", renderer->camera.position);
-
-    DUAL_Vec2 size = { transform.echelle.x, transform.echelle.y };
-    DUAL_Shader_setVec2(renderer->current_shader, "uSize", size);
-
-    DUAL_Shader_setVec3(renderer->current_shader, "uPosition", transform.position);
-    DUAL_Shader_setVec3(renderer->current_shader, "uColor", color);
+    DUAL_Shader_setMat4(shader, "uVP", DUAL_Mat4_Multiply(renderer->perspective_projection, DUAL_Camera3D_GetViewMatrix(&renderer->camera)));
+    DUAL_Shader_setVec3(shader, "uCameraPos", renderer->camera.position);
+    DUAL_Shader_setVec2(shader, "uSize", (DUAL_Vec2){ transform.echelle.x, transform.echelle.y });
+    DUAL_Shader_setVec3(shader, "uPosition", transform.position);
+    DUAL_Shader_setVec3(shader, "uColor", color);
 
     glBindVertexArray(renderer->billboard_vao);
     glDrawArrays(GL_POINTS, 0, 1);
     glBindVertexArray(0);
 
-    // Réactivation du Culling selon le mode global
     ApplyCullMode3D(renderer->cull_mode);
 
     renderer->current_shader = previous_shader;
@@ -865,14 +863,15 @@ void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, 
 
 void DUAL_Renderer3d_SendLightInfosToShader(DUAL_Renderer3D* renderer, DUAL_Shader* shader) {
     DUAL_Shader_setVec3(shader, "uAmbientLight", renderer->ambient_light);
-    char uname[64];
     for (int i = 0; i < DUAL_MAX_LIGHTS_3D; i++) {
-        sprintf(uname, "uLights[%d].type", i);      DUAL_Shader_setInt(shader, uname, renderer->lights[i].type);
-        sprintf(uname, "uLights[%d].position", i);  DUAL_Shader_setVec3(shader, uname, renderer->lights[i].position);
-        sprintf(uname, "uLights[%d].direction", i); DUAL_Shader_setVec3(shader, uname, renderer->lights[i].direction);
-        sprintf(uname, "uLights[%d].color", i);     DUAL_Shader_setVec3(shader, uname, renderer->lights[i].couleur);
-        sprintf(uname, "uLights[%d].intensity", i); DUAL_Shader_setFloat(shader, uname, renderer->lights[i].intensite);
-        sprintf(uname, "uLights[%d].range", i);     DUAL_Shader_setFloat(shader, uname, renderer->lights[i].portee);
+        const DUAL_Light* light = &renderer->lights[i];
+        const char* const* names = kLightUniforms[i];
+        DUAL_Shader_setInt(shader, names[0], light->type);
+        DUAL_Shader_setVec3(shader, names[1], light->position);
+        DUAL_Shader_setVec3(shader, names[2], light->direction);
+        DUAL_Shader_setVec3(shader, names[3], light->couleur);
+        DUAL_Shader_setFloat(shader, names[4], light->intensite);
+        DUAL_Shader_setFloat(shader, names[5], light->portee);
     }
 }
 
@@ -902,127 +901,86 @@ void DUAL_Renderer3D_UseShader(DUAL_Renderer3D* renderer, DUAL_Renderer3d_Shader
             break;
     }
 }
+
 void DUAL_Renderer3D_UseCustomShader(DUAL_Renderer3D* renderer, DUAL_Shader* shader) {
     if (!renderer || !shader) return;
     renderer->current_shader = shader;
 }
+
 DUAL_Camera3D* DUAL_Renderer3D_GetCamera(DUAL_Renderer3D* renderer) {
     return &renderer->camera;
 }
 
 void DUAL_Debug_DrawLine(DUAL_Renderer3D* debug, DUAL_Vec3 start, DUAL_Vec3 end, DUAL_Vec3 color) {
-    if (debug->debug_renderer.count + 2 > debug->debug_renderer.capacity) return; // Sécurité realloc
+    if (debug->debug_renderer.count + 2 > debug->debug_renderer.capacity) return;
 
     debug->debug_renderer.vertices[debug->debug_renderer.count++] = (LineVertex){ start, color };
     debug->debug_renderer.vertices[debug->debug_renderer.count++] = (LineVertex){ end, color };
 }
 
 void DUAL_Debug_DrawCircle(DUAL_Renderer3D* debug, DUAL_Vec3 center, float radius, int segments, DUAL_Vec3 color) {
-    float step = (2.0f * 3.14159265f) / (float)segments;
+    if (segments <= 0) return;
+    const float step = TWO_PI_F / (float)segments;
+
+    DUAL_Vec3 p1 = { center.x + radius, center.y, center.z };
 
     for (int i = 0; i < segments; i++) {
-        float angle1 = i * step;
-        float angle2 = (i + 1) * step;
-
-        // Cercle dans le plan XZ (au sol)
-        DUAL_Vec3 p1 = { center.x + cosf(angle1) * radius, center.y, center.z + sinf(angle1) * radius };
-        DUAL_Vec3 p2 = { center.x + cosf(angle2) * radius, center.y, center.z + sinf(angle2) * radius };
-
+        float angle = (float)(i + 1) * step;
+        DUAL_Vec3 p2 = { center.x + cosf(angle) * radius, center.y, center.z + sinf(angle) * radius };
         DUAL_Debug_DrawLine(debug, p1, p2, color);
+        p1 = p2;
+    }
+}
+
+static void EmitBoxEdges(DUAL_Renderer3D* debug, const DUAL_Vec3 corners[8], DUAL_Vec3 color) {
+    for (int i = 0; i < 12; i++) {
+        DUAL_Debug_DrawLine(debug, corners[kBoxEdges[i][0]], corners[kBoxEdges[i][1]], color);
     }
 }
 
 void DUAL_Debug_DrawAABB(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Vec3 color) {
-    DUAL_Vec3 min = box.min;
-    DUAL_Vec3 max = box.max;
-
-    // Les 8 coins du cube
-    DUAL_Vec3 c1 = { min.x, min.y, min.z }, c2 = { max.x, min.y, min.z };
-    DUAL_Vec3 c3 = { max.x, min.y, max.z }, c4 = { min.x, min.y, max.z };
-    DUAL_Vec3 c5 = { min.x, max.y, min.z }, c6 = { max.x, max.y, min.z };
-    DUAL_Vec3 c7 = { max.x, max.y, max.z }, c8 = { min.x, max.y, max.z };
-
-    // Bas
-    DUAL_Debug_DrawLine(debug, c1, c2, color); DUAL_Debug_DrawLine(debug, c2, c3, color);
-    DUAL_Debug_DrawLine(debug, c3, c4, color); DUAL_Debug_DrawLine(debug, c4, c1, color);
-    // Haut
-    DUAL_Debug_DrawLine(debug, c5, c6, color); DUAL_Debug_DrawLine(debug, c6, c7, color);
-    DUAL_Debug_DrawLine(debug, c7, c8, color); DUAL_Debug_DrawLine(debug, c8, c5, color);
-    // Piliers
-    DUAL_Debug_DrawLine(debug, c1, c5, color); DUAL_Debug_DrawLine(debug, c2, c6, color);
-    DUAL_Debug_DrawLine(debug, c3, c7, color); DUAL_Debug_DrawLine(debug, c4, c8, color);
+    const DUAL_Vec3 min = box.min;
+    const DUAL_Vec3 max = box.max;
+    const DUAL_Vec3 corners[8] = {
+        { min.x, min.y, min.z }, { max.x, min.y, min.z },
+        { max.x, min.y, max.z }, { min.x, min.y, max.z },
+        { min.x, max.y, min.z }, { max.x, max.y, min.z },
+        { max.x, max.y, max.z }, { min.x, max.y, max.z }
+    };
+    EmitBoxEdges(debug, corners, color);
 }
 
 void DUAL_Debug_DrawSphere(DUAL_Renderer3D* debug, DUAL_Sphere sphere, DUAL_Vec3 color) {
     const int segments = 16;
-    const float step = (2.0f * M_PI) / (float)segments;
+    const float step = TWO_PI_F / (float)segments;
+    const DUAL_Vec3 c = sphere.centre;
+    const float r = sphere.rayon;
+
+    float cos1 = 1.0f, sin1 = 0.0f;
 
     for (int i = 0; i < segments; i++) {
-        float theta1 = i * step;
-        float theta2 = (i + 1) * step;
-
-        float cos1 = cosf(theta1), sin1 = sinf(theta1);
+        float theta2 = (float)(i + 1) * step;
         float cos2 = cosf(theta2), sin2 = sinf(theta2);
 
-        DUAL_Vec3 xz1 = {
-            sphere.centre.x + sphere.rayon * cos1,
-            sphere.centre.y,
-            sphere.centre.z + sphere.rayon * sin1
-        };
-        DUAL_Vec3 xz2 = {
-            sphere.centre.x + sphere.rayon * cos2,
-            sphere.centre.y,
-            sphere.centre.z + sphere.rayon * sin2
-        };
-        DUAL_Debug_DrawLine(debug, xz1, xz2, color);
+        DUAL_Debug_DrawLine(debug,
+            (DUAL_Vec3){ c.x + r * cos1, c.y, c.z + r * sin1 },
+            (DUAL_Vec3){ c.x + r * cos2, c.y, c.z + r * sin2 }, color);
 
-        DUAL_Vec3 xy1 = {
-            sphere.centre.x + sphere.rayon * cos1,
-            sphere.centre.y + sphere.rayon * sin1,
-            sphere.centre.z
-        };
-        DUAL_Vec3 xy2 = {
-            sphere.centre.x + sphere.rayon * cos2,
-            sphere.centre.y + sphere.rayon * sin2,
-            sphere.centre.z
-        };
-        DUAL_Debug_DrawLine(debug, xy1, xy2, color);
+        DUAL_Debug_DrawLine(debug,
+            (DUAL_Vec3){ c.x + r * cos1, c.y + r * sin1, c.z },
+            (DUAL_Vec3){ c.x + r * cos2, c.y + r * sin2, c.z }, color);
 
-        DUAL_Vec3 yz1 = {
-            sphere.centre.x,
-            sphere.centre.y + sphere.rayon * cos1,
-            sphere.centre.z + sphere.rayon * sin1
-        };
-        DUAL_Vec3 yz2 = {
-            sphere.centre.x,
-            sphere.centre.y + sphere.rayon * cos2,
-            sphere.centre.z + sphere.rayon * sin2
-        };
-        DUAL_Debug_DrawLine(debug, yz1, yz2, color);
+        DUAL_Debug_DrawLine(debug,
+            (DUAL_Vec3){ c.x, c.y + r * cos1, c.z + r * sin1 },
+            (DUAL_Vec3){ c.x, c.y + r * cos2, c.z + r * sin2 }, color);
+
+        cos1 = cos2;
+        sin1 = sin2;
     }
 }
 
 void DUAL_Debug_Render(DUAL_Renderer3D* debug, DUAL_Renderer3D* renderer) {
-    if (debug->debug_renderer.count == 0) return;
-
-    glBindBuffer(GL_ARRAY_BUFFER, debug->debug_renderer.vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(LineVertex) * debug->debug_renderer.count, debug->debug_renderer.vertices);
-
-    DUAL_Shader* current_shader = renderer->current_shader;
-
-    DUAL_Renderer3D_UseShader(renderer, SHADER3D_SHADER_DEBUG);
-    DUAL_Shader_use(renderer->current_shader);
-    DUAL_Shader_setMat4(renderer->current_shader, "uModel", DUAL_Mat4_Identity());
-    DUAL_Shader_setMat4(renderer->current_shader, "uView", DUAL_Camera3D_GetViewMatrix(&renderer->camera));
-    DUAL_Shader_setMat4(renderer->current_shader, "uProjection", renderer->perspective_projection);
-
-    glBindVertexArray(debug->debug_renderer.vao);
-    glDrawArrays(GL_LINES, 0, debug->debug_renderer.count);
-    glBindVertexArray(0);
-
-    debug->debug_renderer.count = 0;
-
-    DUAL_Renderer3D_UseCustomShader(renderer, current_shader);
+    FlushDebugLines(debug, renderer);
 }
 
 DUAL_Vec3 DUAL_Mat4_TransformPoint(DUAL_Mat4 m, DUAL_Vec3 v) {
@@ -1032,16 +990,12 @@ DUAL_Vec3 DUAL_Mat4_TransformPoint(DUAL_Mat4 m, DUAL_Vec3 v) {
     res.z = m.m[2]*v.x + m.m[6]*v.y + m.m[10]*v.z + m.m[14];
     return res;
 }
-void DUAL_Debug_Draw_Model_BoundingBox(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Transform3D transform, DUAL_Vec3 color) {
-    DUAL_Mat4 scale   = DUAL_Mat4_Scale(transform.echelle);
-    DUAL_Mat4 rot_x   = DUAL_Mat4_Rotate((DUAL_Vec3){ 1.0f, 0.0f, 0.0f }, transform.rotation_euler_radians.x);
-    DUAL_Mat4 rot_y   = DUAL_Mat4_Rotate((DUAL_Vec3){ 0.0f, 1.0f, 0.0f }, transform.rotation_euler_radians.y);
-    DUAL_Mat4 rot_z   = DUAL_Mat4_Rotate((DUAL_Vec3){ 0.0f, 0.0f, 1.0f }, transform.rotation_euler_radians.z);
-    DUAL_Mat4 trans   = DUAL_Mat4_Translate(transform.position);
-    DUAL_Mat4 modelMat = DUAL_Mat4_Multiply(trans, DUAL_Mat4_Multiply(DUAL_Mat4_Multiply(rot_z, DUAL_Mat4_Multiply(rot_y, rot_x)), scale));
 
-    DUAL_Vec3 min = box.min;
-    DUAL_Vec3 max = box.max;
+void DUAL_Debug_Draw_Model_BoundingBox(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Transform3D transform, DUAL_Vec3 color) {
+    const DUAL_Mat4 modelMat = BuildModelMatrix(&transform);
+
+    const DUAL_Vec3 min = box.min;
+    const DUAL_Vec3 max = box.max;
     DUAL_Vec3 corners[8] = {
         { min.x, min.y, min.z }, { max.x, min.y, min.z },
         { max.x, min.y, max.z }, { min.x, min.y, max.z },
@@ -1053,19 +1007,75 @@ void DUAL_Debug_Draw_Model_BoundingBox(DUAL_Renderer3D* debug, DUAL_AABB box, DU
         corners[i] = DUAL_Mat4_TransformPoint(modelMat, corners[i]);
     }
 
-    // (Bas)
-    DUAL_Debug_DrawLine(debug, corners[0], corners[1], color);
-    DUAL_Debug_DrawLine(debug, corners[1], corners[2], color);
-    DUAL_Debug_DrawLine(debug, corners[2], corners[3], color);
-    DUAL_Debug_DrawLine(debug, corners[3], corners[0], color);
-    // (Haut)
-    DUAL_Debug_DrawLine(debug, corners[4], corners[5], color);
-    DUAL_Debug_DrawLine(debug, corners[5], corners[6], color);
-    DUAL_Debug_DrawLine(debug, corners[6], corners[7], color);
-    DUAL_Debug_DrawLine(debug, corners[7], corners[4], color);
-    // (Piliers)
-    DUAL_Debug_DrawLine(debug, corners[0], corners[4], color);
-    DUAL_Debug_DrawLine(debug, corners[1], corners[5], color);
-    DUAL_Debug_DrawLine(debug, corners[2], corners[6], color);
-    DUAL_Debug_DrawLine(debug, corners[3], corners[7], color);
+    EmitBoxEdges(debug, corners, color);
+}
+
+DUAL_Result DUAL_AnimatedModel_Create(DUAL_ResourceManager* resources, const char* glb_path, DUAL_Animated_Model** out_animated_model) {
+    if (!glb_path || !out_animated_model) return DUAL_ERROR_INVALID_ARG;
+
+    DUAL_Animated_Model* anim_model = calloc(1, sizeof(DUAL_Animated_Model));
+    if (!anim_model) return DUAL_ERROR_OUT_OF_MEMORY;
+
+    const struct aiScene* scene = ImportModelScene(glb_path);
+    if (!scene) {
+        free(anim_model);
+        return DUAL_ERROR_NOT_FOUND;
+    }
+
+    DUAL_Result res = BuildModel(resources, glb_path, scene, &anim_model->model, NULL, NULL);
+    if (res != DUAL_OK) {
+        aiReleaseImport(scene);
+        free(anim_model);
+        return res;
+    }
+
+    anim_model->animation_count = scene->mNumAnimations;
+    if (anim_model->animation_count > 0) {
+        anim_model->animations = calloc(anim_model->animation_count, sizeof(Animation*));
+        if (!anim_model->animations) {
+            aiReleaseImport(scene);
+            DUAL_Model_Destroy(resources, anim_model->model);
+            free(anim_model);
+            return DUAL_ERROR_OUT_OF_MEMORY;
+        }
+
+        for (unsigned int i = 0; i < anim_model->animation_count; i++) {
+            anim_model->animations[i] = BuildAnimation(scene, scene->mAnimations[i], anim_model->model, false);
+        }
+
+        Animator_Init(&anim_model->animator, anim_model->animations[0]);
+    } else {
+        anim_model->animations = NULL;
+        Animator_Init(&anim_model->animator, NULL);
+    }
+
+    aiReleaseImport(scene);
+    *out_animated_model = anim_model;
+    return DUAL_OK;
+}
+
+void DUAL_AnimatedModel_PlayAnimation(DUAL_Animated_Model* anim_model, unsigned int index) {
+    if (!anim_model || index >= anim_model->animation_count) return;
+    if (anim_model->animations[index]) {
+        Animator_Init(&anim_model->animator, anim_model->animations[index]);
+    }
+}
+
+void DUAL_AnimatedModel_Update(DUAL_Animated_Model* anim_model, float dt) {
+    if (!anim_model) return;
+    Animator_UpdateAnimation(&anim_model->animator, dt);
+}
+
+void DUAL_AnimatedModel_Destroy(DUAL_ResourceManager* resources, DUAL_Animated_Model* anim_model) {
+    if (!anim_model) return;
+    if (anim_model->animations) {
+        for (unsigned int i = 0; i < anim_model->animation_count; i++) {
+            FreeAnimation(anim_model->animations[i]);
+        }
+        free(anim_model->animations);
+    }
+    if (anim_model->model) {
+        DUAL_Model_Destroy(resources, anim_model->model);
+    }
+    free(anim_model);
 }
