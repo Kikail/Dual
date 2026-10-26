@@ -304,6 +304,25 @@ DUAL_Result DUAL_LoadFile(const char* filename, char* buffer, size_t buffer_size
     return DUAL_OK;
 }
 
+DUAL_Result DUAL_GetFileSize(char* filename, uint64_t* out_taille_octets) {
+    if (!filename || !out_taille_octets) return DUAL_ERROR_INVALID_ARG;
+
+    FILE* handle = fopen(filename, "rb");
+    long position_actuelle = ftell(handle);
+    if (position_actuelle < 0) return DUAL_ERROR_UNKNOWN;
+
+    if (fseek(handle, 0, SEEK_END) != 0) return DUAL_ERROR_UNKNOWN;
+
+    long taille = ftell(handle);
+    if (taille < 0) return DUAL_ERROR_UNKNOWN;
+
+    /* On restaure la position de lecture/écriture d'origine. */
+    fseek(handle, position_actuelle, SEEK_SET);
+
+    *out_taille_octets = (uint64_t)taille;
+    return DUAL_OK;
+}
+
 DUAL_ScreenLayout DUAL_GetScreenLayout(const DUAL_App* app) {
     if (!app) return DUAL_LAYOUT_HORIZONTAL_SPLIT;
     return app->layout;

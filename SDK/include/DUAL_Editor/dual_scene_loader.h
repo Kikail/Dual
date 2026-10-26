@@ -102,6 +102,7 @@ size_t scene_getTotalSize(DUAL_Editor_Scene* scene);
 
 // Creation de Entity pour la Scene
 DUAL_Editor_SceneEntity* createEntity(DUAL_Editor_EntityType type, DUAL_Transform3D transform3_d, const char* name, void* blockData);
+DUAL_Editor_SceneEntity* getEntity(DUAL_Editor_Scene* scene, unsigned int index);
 void addEntity(DUAL_Editor_Scene* scene,DUAL_Editor_SceneEntity* entity);
 void removeEntity(DUAL_Editor_Scene* scene, DUAL_Editor_SceneEntity* entity);
 

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <glib/ghash.h>
 
 /* Déclaration de la structure opaque du Handle */
 struct DUAL_ResourceHandle {
@@ -11,8 +12,11 @@ struct DUAL_ResourceHandle {
     char* nom_debug;
     void* ptr_ressource;
     void (*callback_destruction)(DUAL_ResourceManager*, void*);
+
     struct DUAL_ResourceHandle* prev;
     struct DUAL_ResourceHandle* next;
+
+    GHashTable* hashmap;    // On va changer notre systeme de ressource par une hashmap pour un acces facile en jeu
 };
 
 
@@ -24,6 +28,7 @@ struct DUAL_ResourceManager {
     uint64_t ram_totale;
     uint32_t nombre_ressources;
     DUAL_ResourceHandle* head;
+
 };
 
 

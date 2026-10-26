@@ -105,18 +105,18 @@ target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} ${GLIB_LI
 # 2. CONFIGURATION DU JEU (La cartouche .so)
 # ========================================================================
 
-add_library(game SHARED Jeux/Jeu1/game.c)
+add_library(game SHARED Jeux/Jeu2/game.c)
 target_include_directories(game PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
 )
 target_link_libraries(game PRIVATE ${GLIB_LIBRARIES})
 set_target_properties(game PROPERTIES PREFIX "")
-set(CLE_USB "/media/killian/692B-8D17")
+set(CLE_USB "/home/killian/Desktop/Games/DUAL_FPS_Game")
 add_custom_command(TARGET game POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
         $<TARGET_FILE:game>
         ${CLE_USB}/game.so
-        COMMENT "Copie de game.so vers la racine de la cle USB..."
+        COMMENT "Copie de game.so vers /home/killian/Desktop/Games/DUAL_FPS_Game ..."
 )
 
 
@@ -209,9 +209,9 @@ target_include_directories(testing_scene_loader PRIVATE
 target_link_libraries(testing_scene_loader PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
 
 # Test Scene Loader
-add_executable(test_ui Jeux/Testing/test_ui.c ${SDK_SOURCES})
-target_include_directories(test_ui PRIVATE
+add_executable(fps_game_demo Jeux/Testing/fps_game_demo.c ${SDK_SOURCES})
+target_include_directories(fps_game_demo PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
-target_link_libraries(test_ui PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
+target_link_libraries(fps_game_demo PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)

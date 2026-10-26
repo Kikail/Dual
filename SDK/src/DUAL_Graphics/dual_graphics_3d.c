@@ -484,7 +484,7 @@ static DUAL_Result BuildModel(DUAL_ResourceManager* resources, const char* chemi
             DUAL_Material_Create(resources, texture, &model->materials[i]);
         }
     }
-
+    model->handle
     if (out_material_count) *out_material_count = model->material_count;
     if (out_materials) *out_materials = model->materials;
 
@@ -1082,4 +1082,14 @@ void DUAL_AnimatedModel_Destroy(DUAL_ResourceManager* resources, DUAL_Animated_M
         DUAL_Model_Destroy(resources, anim_model->model);
     }
     free(anim_model);
+}
+
+void DUAL_Debug_Transform(DUAL_Transform3D transform) {
+    DUAL_Debug_Vec3(transform.position);
+    DUAL_Debug_Vec3(transform.rotation_euler_radians);
+    DUAL_Debug_Vec3(transform.echelle);
+    printf("\n");
+}
+void DUAL_Debug_Vec3(DUAL_Vec3 vector) {
+    printf("(%f, %f, %f)", vector.x, vector.y, vector.z);
 }

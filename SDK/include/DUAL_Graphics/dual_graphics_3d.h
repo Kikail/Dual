@@ -252,6 +252,9 @@ void DUAL_AnimatedModel_PlayAnimation(DUAL_Animated_Model* anim_model, unsigned 
 void DUAL_AnimatedModel_Update(DUAL_Animated_Model* anim_model, float dt);
 void DUAL_AnimatedModel_Destroy(DUAL_ResourceManager* resources, DUAL_Animated_Model* anim_model);
 
+void DUAL_Debug_Transform(DUAL_Transform3D transform);
+void DUAL_Debug_Vec3(DUAL_Vec3 vector);
+
 #ifdef __cplusplus
 }
 #endif

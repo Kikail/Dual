@@ -7,6 +7,7 @@
 #include "../../SDK/include/dual_utils.h"
 
 int main() {
+    /*
     printf("\n");
 
     // On creer notre Scene
@@ -63,26 +64,29 @@ int main() {
     result = DUAL_SaveFile_Open(0,DUAL_SAVE_MODE_ECRITURE, &save);
     result = DUAL_SaveFile_Write(save, buffer, total_size);
     result = DUAL_SaveFile_Close(save);
+    */
 
 
     // On charge la scene depuis le fichier creer
-    result = DUAL_SaveFile_Open(0, DUAL_SAVE_MODE_LECTURE, &save);
-    DEBUG_DUAL_RESULT(result);
+
+    char* filepath = "/home/killian/Documents/myScene.dual";
+
     long unsigned int filesize = 0;
-    result = DUAL_SaveFile_GetSize(save, &filesize);
-    DEBUG_DUAL_RESULT(result);
-    char new_buffer[filesize];
-    memset(new_buffer, 0, filesize);
-    result = DUAL_SaveFile_Read(save, new_buffer, filesize, NULL);
-    DEBUG_DUAL_RESULT(result);
+    DUAL_GetFileSize(filepath, &filesize);
+    char new_buffer[filesize]; memset(new_buffer, 0, filesize);
+    DUAL_LoadFile(filepath, new_buffer, filesize);
+
+    print_buffer_hex(new_buffer, filesize);
 
     // On va creer une deuxieme scene qui va etre chargee depuis le buffer
     DUAL_Editor_Scene scene2;
     unsigned int buffer_offset_scene = 0;
     charger_scene(&scene2, new_buffer, &buffer_offset_scene);
 
-    DUAL_Editor_SceneEntity* target_entity = (DUAL_Editor_SceneEntity*) g_list_nth_data(scene2.entities, 0);
-    removeEntity(&scene2, target_entity);
+    for (int i = 0; i < scene2.numEntities; i++) {
+        DUAL_Editor_SceneEntity* pt = getEntity(&scene2, i);
+        DUAL_Debug_Transform(pt->transform);
+    }
 
     afficher_scene(&scene2);
 

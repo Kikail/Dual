@@ -139,6 +139,11 @@ DUAL_Editor_SceneEntity* createEntity(DUAL_Editor_EntityType type, DUAL_Transfor
     return entity;
 }
 
+DUAL_Editor_SceneEntity* getEntity(DUAL_Editor_Scene* scene, unsigned int index) {
+    return g_list_nth_data(scene->entities, index);
+}
+
+
 void addEntity(DUAL_Editor_Scene* scene,DUAL_Editor_SceneEntity* entity) {
     scene->entities = g_list_append(scene->entities, entity);
     scene->numEntities += 1;

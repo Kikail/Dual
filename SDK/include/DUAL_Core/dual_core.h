@@ -291,6 +291,7 @@ void DUAL_Log(DUAL_LogLevel niveau, const char* format, ...);
  * ========================================================================== */
 
 DUAL_Result DUAL_LoadFile(const char* filename, char* buffer, size_t buffer_size);
+DUAL_Result DUAL_GetFileSize(char* filename, uint64_t* out_taille_octets);
 DUAL_ScreenLayout DUAL_GetScreenLayout(const DUAL_App* app);
 
 #ifdef __cplusplus
