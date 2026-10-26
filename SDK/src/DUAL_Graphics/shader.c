@@ -193,6 +193,11 @@ void DUAL_Shader_setVec4(DUAL_Shader* shader, char* name, DUAL_Vec4 value) {
     glUniform4fv(glGetUniformLocation(shader->shaderID, name), 1, (float[4]){value.x, value.y, value.z, value.w});
 }
 
+void DUAL_Shader_setColor(DUAL_Shader* shader, char* name, DUAL_Color value) {
+    glUniform4fv(glGetUniformLocation(shader->shaderID, name), 1, (float[4]){value.r, value.g, value.b, value.a});
+}
+
+
 void DUAL_Shader_setMat4(DUAL_Shader* shader, char* name, DUAL_Mat4 value) {
     glUniformMatrix4fv(glGetUniformLocation(shader->shaderID, name), 1, GL_FALSE, value.m);
 }

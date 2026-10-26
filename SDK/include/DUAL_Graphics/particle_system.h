@@ -6,16 +6,17 @@
 #define DUAL_PARTICLE_SYSTEM_H
 
 #include "../DUAL_Math/dual_math.h"
+#include "DUAL_Core/dual_core.h"
 
 typedef struct Particle {
     DUAL_Vec3 position;
     DUAL_Vec3 velocity;
-    DUAL_Vec3 color;
+    DUAL_Color color;
     DUAL_Vec3 size;
     float lifespan;
     float lifetime;
 }Particle;
-Particle Particle_Create(DUAL_Vec3 position, DUAL_Vec3 velocity, DUAL_Vec3 color, DUAL_Vec3 size, float life);
+Particle Particle_Create(DUAL_Vec3 position, DUAL_Vec3 velocity, DUAL_Color color, DUAL_Vec3 size, float life);
 
 // Structure qui s'occupe de gerer la modification des particules
 typedef struct ParticleEmitter {
@@ -23,7 +24,7 @@ typedef struct ParticleEmitter {
     float lifespan;
     DUAL_Vec3 (*init_position)(void);
     DUAL_Vec3 (*init_scale)(void);
-    DUAL_Vec3 (*init_color)(void);
+    DUAL_Color (*init_color)(void);
     DUAL_Vec3 (*init_velocity)(void);
     float (*init_lifetime)(void);
     void (*particle_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime);
@@ -31,7 +32,7 @@ typedef struct ParticleEmitter {
 ParticleEmitter* ParticleEmitter_Init(
     DUAL_Vec3 (*init_position_function)(void),
     DUAL_Vec3 (*init_scale)(void),
-    DUAL_Vec3 (*init_color)(void),
+    DUAL_Color (*init_color)(void),
     DUAL_Vec3 (*init_velocity)(void),
     float (*init_lifetime)(void),
     void (*particle_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime),

@@ -10,7 +10,7 @@
 
 #include "DUAL_Core/dual_core.h"
 
-Particle Particle_Create(DUAL_Vec3 position, DUAL_Vec3 velocity, DUAL_Vec3 color, DUAL_Vec3 size, float life) {
+Particle Particle_Create(DUAL_Vec3 position, DUAL_Vec3 velocity, DUAL_Color color, DUAL_Vec3 size, float life) {
     Particle particle;
     particle.position = position;
     particle.velocity = velocity;
@@ -46,7 +46,7 @@ void ParticleSystem_Clean(ParticleSystem* particles) {
 ParticleEmitter* ParticleEmitter_Init(
     DUAL_Vec3 (*init_position_function)(void),
     DUAL_Vec3 (*init_scale)(void),
-    DUAL_Vec3 (*init_color)(void),
+    DUAL_Color (*init_color)(void),
     DUAL_Vec3 (*init_velocity)(void),
     float (*init_lifetime)(void),
     void (*particle_over_time)(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime),

@@ -772,6 +772,8 @@ void DUAL_Renderer3D_Begin(DUAL_Renderer3D* renderer) {
     if (!renderer) return;
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glClear(GL_DEPTH_BUFFER_BIT);
     ApplyCullMode3D(renderer->cull_mode);
     glPolygonMode(GL_FRONT_AND_BACK, (renderer->render_mode == DUAL_RENDER_WIREFRAME) ? GL_LINE : GL_FILL);
@@ -829,7 +831,7 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
     glBindVertexArray(0);
 }
 
-void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, DUAL_Transform3D transform, DUAL_Vec3 color) {
+void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, DUAL_Transform3D transform, DUAL_Color color) {
     if (!renderer || !texture) return;
 
     DUAL_Shader* previous_shader = renderer->current_shader;
@@ -838,6 +840,7 @@ void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, 
     DUAL_Shader_use(shader);
 
     glDisable(GL_CULL_FACE);
+    glDepthMask(GL_FALSE);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, DUAL_Internal_GetTextureID(texture));
@@ -847,13 +850,14 @@ void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, 
     DUAL_Shader_setVec3(shader, "uCameraPos", renderer->camera.position);
     DUAL_Shader_setVec2(shader, "uSize", (DUAL_Vec2){ transform.echelle.x, transform.echelle.y });
     DUAL_Shader_setVec3(shader, "uPosition", transform.position);
-    DUAL_Shader_setVec3(shader, "uColor", color);
+    DUAL_Shader_setColor(shader, "uColor", color);
 
     glBindVertexArray(renderer->billboard_vao);
     glDrawArrays(GL_POINTS, 0, 1);
     glBindVertexArray(0);
 
     ApplyCullMode3D(renderer->cull_mode);
+    glDepthMask(GL_TRUE);
 
     renderer->current_shader = previous_shader;
     if (previous_shader) {

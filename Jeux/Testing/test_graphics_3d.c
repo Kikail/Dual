@@ -18,7 +18,7 @@
 
 #define MODEL_AMBULANCE_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/cars/OBJ format/ambulance.obj"
 #define MODEL_FIRETRUCK_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/cars/OBJ format/firetruck.obj"
-#define TEXTURE_DEFAULT_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/default_texture.png"
+#define TEXTURE_DEFAULT_PATH "/home/killian/Projects/C/Dual/SDK/internal_resources/textures/gradient-radial.png"
 
 #define MODEL_CUBES_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/skeletalModels/testmodel/model_w_animations.glb"
 
@@ -42,8 +42,8 @@ DUAL_Vec3 init_velocity_function(void){
 DUAL_Vec3 init_scale_function(void){
     return (DUAL_Vec3){0.0, 0.0, 0.0};
 }
-DUAL_Vec3 init_color_function(void){
-    return (DUAL_Vec3){0.0, 0.0, 0.0};
+DUAL_Color init_color_function(void){
+    return (DUAL_Color){0.0, 0.0, 0.0, 1.0};
 }
 float init_lifetime(void){
     return (float)random_value(1.0, 3.0);
@@ -51,27 +51,37 @@ float init_lifetime(void){
 
 void particle_over_time(struct ParticleEmitter* emitter, Particle* particles, unsigned int nbParticles, float deltaTime) {
     current_rotation += deltaTime * 120.0;
-    if (current_rotation >= 360.0)current_rotation = 0.0;
+    if (current_rotation >= 360.0) current_rotation = 0.0;
     DUAL_Mat4 rotx = DUAL_Mat4_Rotate((DUAL_Vec3){1.0,0.0,0.0}, DUAL_RAD(45.0));
     DUAL_Mat4 roty = DUAL_Mat4_Rotate((DUAL_Vec3){0.0,1.0,0.0}, DUAL_RAD(current_rotation));
     *rotation = DUAL_Mat4_Multiply(roty, rotx);
 
     for (unsigned int i = 0; i < nbParticles; i++) {
-        particles[i].velocity.y += -9.81 * deltaTime;
-        particles[i].position.x += particles[i].velocity.x * deltaTime;
-        particles[i].position.y += particles[i].velocity.y * deltaTime;
-        particles[i].position.z += particles[i].velocity.z * deltaTime;
+        if (particles[i].lifespan > 0.0f) {
+            particles[i].lifespan -= deltaTime;
 
-        particles[i].size.x = 1-(particles[i].lifespan / particles[i].lifetime);
-        particles[i].size.y = 1-(particles[i].lifespan / particles[i].lifetime);
-        particles[i].size.z = 1-(particles[i].lifespan / particles[i].lifetime);
+            if (particles[i].lifespan <= 0.0f) {
+                continue;
+            }
 
-        particles[i].color.x = particles[i].lifespan / particles[i].lifetime;
-        particles[i].color.y = particles[i].lifespan / particles[i].lifetime;
-        particles[i].color.z = particles[i].lifespan / particles[i].lifetime;
+            particles[i].velocity.y += -9.81 * deltaTime;
+            particles[i].position.x += particles[i].velocity.x * deltaTime;
+            particles[i].position.y += particles[i].velocity.y * deltaTime;
+            particles[i].position.z += particles[i].velocity.z * deltaTime;
+
+            float lifeFactor = (particles[i].lifespan / particles[i].lifetime);
+
+            particles[i].size.x = 0.5;
+            particles[i].size.y = 0.5;
+            particles[i].size.z = 0.5;
+
+            particles[i].color.r = 1.0;
+            particles[i].color.g = 1.0;
+            particles[i].color.b = 1.0;
+            particles[i].color.a = lifeFactor;
+        }
     }
 }
-
 #define PARTICLE_NUMBER 20000
 
 int main() {
@@ -273,7 +283,6 @@ int main() {
         DUAL_DrawModel(renderer3D, ambulanceModel, materials, ambulanceTransform3D);
 
         for (int i = 0; i < PARTICLE_NUMBER; i++) {
-            break;
             if (particles[i].lifespan > 0) {
                 DUAL_Transform3D tmp;
                 tmp.position = particles[i].position;
@@ -284,7 +293,7 @@ int main() {
 
         DUAL_Material* materials_list[] = { material };
         DUAL_Renderer3D_UseShader(renderer3D, SHADER3D_SKELETAL_LIT);
-        DUAL_DrawAnimatedModel(renderer3D, cubes->model, materials_list, cubesTransform3D, &cubes->animator);
+        //DUAL_DrawAnimatedModel(renderer3D, cubes->model, materials_list, cubesTransform3D, &cubes->animator);
 
         DUAL_Renderer3D_End(renderer3D);
 

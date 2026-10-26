@@ -7,6 +7,7 @@
 
 #include <stdbool.h>
 #include "../DUAL_Math/dual_math.h"
+#include "DUAL_Core/dual_core.h"
 
 typedef enum DUAL_ShaderRender {
     DUAL_SHADER_LIT       = 0,
@@ -30,6 +31,7 @@ void DUAL_Shader_setFloat(DUAL_Shader* shader, char* name, float value);
 void DUAL_Shader_setVec2(DUAL_Shader* shader, char* name, DUAL_Vec2 value);
 void DUAL_Shader_setVec3(DUAL_Shader* shader, char* name, DUAL_Vec3 value);
 void DUAL_Shader_setVec4(DUAL_Shader* shader, char* name, DUAL_Vec4 value);
+void DUAL_Shader_setColor(DUAL_Shader* shader, char* name, DUAL_Color value);
 void DUAL_Shader_setMat4(DUAL_Shader* shader, char* name, DUAL_Mat4 value);
 void DUAL_Shader_setMat4Array(DUAL_Shader* shader, char* name, int count, const DUAL_Mat4* values);
 
