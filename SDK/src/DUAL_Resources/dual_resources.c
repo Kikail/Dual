@@ -2,35 +2,134 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <glib/ghash.h>
-
-/* Déclaration de la structure opaque du Handle */
-struct DUAL_ResourceHandle {
-    DUAL_MemoryType type;
-    DUAL_ResourceCategory categorie;
-    uint64_t taille_octets;
-    char* nom_debug;
-    void* ptr_ressource;
-    void (*callback_destruction)(DUAL_ResourceManager*, void*);
-
-    struct DUAL_ResourceHandle* prev;
-    struct DUAL_ResourceHandle* next;
-
-    GHashTable* hashmap;    // On va changer notre systeme de ressource par une hashmap pour un acces facile en jeu
-};
 
 
-struct DUAL_ResourceManager {
-    DUAL_App* app;
-    uint64_t vram_utilisee;
-    uint64_t vram_totale;
-    uint64_t ram_utilisee;
-    uint64_t ram_totale;
-    uint32_t nombre_ressources;
-    DUAL_ResourceHandle* head;
+#include "DUAL_Audio/dual_audio.h"
+#include "DUAL_Graphics/dual_graphics_2d.h"
+#include "DUAL_Graphics/dual_graphics_3d.h"
 
-};
 
+
+DUAL_Result DUAL_ResourceManager_InitHashTables(DUAL_ResourceManager* resource_manager) {
+    resource_manager->texture_collection = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)DUAL_Texture_Destroy);
+    resource_manager->model_collection = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)DUAL_Model_Destroy);
+    resource_manager->animated_models_collection = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)DUAL_AnimatedModel_Destroy);
+    resource_manager->sound_collection = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)DUAL_Sound_Destroy);
+    resource_manager->font_collection = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)DUAL_Font_Destroy);
+}
+
+void DUAL_ResourceManager_AddTexture(DUAL_ResourceManager* manager, DUAL_Texture* resource_ptr) {
+    gboolean existe = g_hash_table_contains(manager->texture_collection, resource_ptr->texture_name);
+    if (existe) {
+        DUAL_Log(DUAL_LOG_WARNING, "%s est deja charge", resource_ptr->texture_name);
+        return;
+    }
+    g_hash_table_insert(manager->texture_collection, strdup(resource_ptr->texture_name), resource_ptr);
+}
+void DUAL_ResourceManager_AddModel(DUAL_ResourceManager* manager, DUAL_Model* resource_ptr) {
+    gboolean existe = g_hash_table_contains(manager->model_collection, resource_ptr->model_name);
+    if (existe) {
+        DUAL_Log(DUAL_LOG_WARNING, "%s est deja charge", resource_ptr->model_name);
+        return;
+    }
+    g_hash_table_insert(manager->model_collection, strdup(resource_ptr->model_name), resource_ptr);
+}
+void DUAL_ResourceManager_AddAnimatedModel(DUAL_ResourceManager* manager, DUAL_Animated_Model* resource_ptr) {
+    gboolean existe = g_hash_table_contains(manager->animated_models_collection, resource_ptr->model_name);
+    if (existe) {
+        DUAL_Log(DUAL_LOG_WARNING, "%s est deja charge", resource_ptr->model_name);
+        return;
+    }
+    g_hash_table_insert(manager->animated_models_collection, strdup(resource_ptr->model_name), resource_ptr);
+}
+void DUAL_ResourceManager_AddSound(DUAL_ResourceManager* manager, DUAL_Sound* resource_ptr) {
+    gboolean existe = g_hash_table_contains(manager->sound_collection, resource_ptr->sound_name);
+    if (existe) {
+        DUAL_Log(DUAL_LOG_WARNING, "%s est deja charge", resource_ptr->sound_name);
+        return;
+    }
+    g_hash_table_insert(manager->sound_collection, strdup(resource_ptr->sound_name), resource_ptr);
+}
+void DUAL_ResourceManager_AddFont(DUAL_ResourceManager* manager, DUAL_Font* resource_ptr) {
+    gboolean existe = g_hash_table_contains(manager->font_collection, resource_ptr->font_name);
+    if (existe) {
+        DUAL_Log(DUAL_LOG_WARNING, "%s est deja charge", resource_ptr->font_name);
+        return;
+    }
+    g_hash_table_insert(manager->font_collection, strdup(resource_ptr->font_name), resource_ptr);
+}
+
+void DUAL_ResourceManager_AddResource(DUAL_ResourceManager* manager, void* resource_ptr, DUAL_ResourceCategory resource_type) {
+    switch (resource_type) {
+        case DUAL_RESOURCE_TEXTURE:
+            DUAL_ResourceManager_AddTexture(manager, resource_ptr);
+            break;
+        case DUAL_RESOURCE_MODEL_3D:
+            DUAL_ResourceManager_AddModel(manager, resource_ptr);
+            break;
+        case DUAL_RESOURCE_ANIMATED_MODEL:
+            DUAL_ResourceManager_AddAnimatedModel(manager, resource_ptr);
+            break;
+        case DUAL_RESOURCE_SOUND:
+            DUAL_ResourceManager_AddSound(manager, resource_ptr);
+            break;
+        case DUAL_RESOURCE_FONT:
+            DUAL_ResourceManager_AddFont(manager, resource_ptr);
+            break;
+    }
+}
+
+void* DUAL_ResourceManager_GetTexture(DUAL_ResourceManager* resource_manager, char* resource_name) {
+    return g_hash_table_lookup(resource_manager->texture_collection, resource_name);
+}
+void* DUAL_ResourceManager_GetModel(DUAL_ResourceManager* resource_manager, char* resource_name) {
+    return g_hash_table_lookup(resource_manager->model_collection, resource_name);
+}
+void* DUAL_ResourceManager_GetAnimatedModel(DUAL_ResourceManager* resource_manager, char* resource_name) {
+    return g_hash_table_lookup(resource_manager->animated_models_collection, resource_name);
+}
+void* DUAL_ResourceManager_GetFont(DUAL_ResourceManager* resource_manager, char* resource_name) {
+    return g_hash_table_lookup(resource_manager->font_collection, resource_name);
+}
+void* DUAL_ResourceManager_GetSound(DUAL_ResourceManager* resource_manager, char* resource_name) {
+    return g_hash_table_lookup(resource_manager->sound_collection, resource_name);
+}
+
+void* DUAL_ResourceManager_GetResource(DUAL_ResourceManager* resource_manager, char* resource_name, DUAL_ResourceCategory resource_type) {
+    switch (resource_type) {
+        case DUAL_RESOURCE_TEXTURE:
+            return DUAL_ResourceManager_GetTexture(resource_manager, resource_name);
+            break;
+        case DUAL_RESOURCE_MODEL_3D:
+            return DUAL_ResourceManager_GetModel(resource_manager, resource_name);
+            break;
+        case DUAL_RESOURCE_ANIMATED_MODEL:
+            return DUAL_ResourceManager_GetAnimatedModel(resource_manager, resource_name);
+            break;
+        case DUAL_RESOURCE_SOUND:
+            return DUAL_ResourceManager_GetSound(resource_manager, resource_name);
+            break;
+        case DUAL_RESOURCE_FONT:
+            return DUAL_ResourceManager_GetFont(resource_manager, resource_name);
+            break;
+    }
+}
+
+void DUAL_GetFilenameWithoutExtension(const char* filepath, char* output_buffer, size_t buffer_size) {
+    if (!filepath || !output_buffer) return;
+    const char* filename = strrchr(filepath, '/');
+    if (filename == NULL) {
+        filename = filepath;
+    } else {
+        filename++;
+    }
+    strncpy(output_buffer, filename, buffer_size);
+    output_buffer[buffer_size - 1] = '\0';
+    char* dot = strrchr(output_buffer, '.');
+    if (dot != NULL) {
+        *dot = '\0';
+    }
+}
 
 static char* DuplicateString(const char* src) {
     if (!src) return NULL;
@@ -52,7 +151,8 @@ DUAL_Result DUAL_ResourceManager_Create(DUAL_App* app, DUAL_ResourceManager** ou
     manager->ram_utilisee = 0;
     manager->ram_totale = 256 * 1024 * 1024;  // Budget RAM par défaut : 256 Mo
     manager->nombre_ressources = 0;
-    manager->head = NULL;
+
+    DUAL_ResourceManager_InitHashTables(manager);
 
     *out_manager = manager;
     return DUAL_OK;
@@ -61,19 +161,7 @@ DUAL_Result DUAL_ResourceManager_Create(DUAL_App* app, DUAL_ResourceManager** ou
 void DUAL_ResourceManager_Destroy(DUAL_ResourceManager* manager) {
     if (!manager) return;
 
-    DUAL_ResourceHandle* current = manager->head;
-    while (current != NULL) {
-        DUAL_ResourceHandle* next = current->next;
-
-        if (current->callback_destruction && current->ptr_ressource) {
-            // Le callback appellera en interne DUAL_XXX_Destroy qui déclenchera Untrack
-            current->callback_destruction(manager, current->ptr_ressource);
-        } else {
-            if (current->nom_debug) free(current->nom_debug);
-            free(current);
-        }
-        current = next;
-    }
+   // A CHANGER AVEC LES HASHMAPS
 
     free(manager);
 }
@@ -81,94 +169,9 @@ void DUAL_ResourceManager_Destroy(DUAL_ResourceManager* manager) {
 void DUAL_ResourceManager_PurgeAll(DUAL_ResourceManager* manager) {
     if (!manager) return;
 
-    // Libère toutes les ressources encore suivies automatiquement
-    DUAL_ResourceHandle* current = manager->head;
-    while (current != NULL) {
-        DUAL_ResourceHandle* next = current->next;
-
-        if (current->callback_destruction && current->ptr_ressource) {
-            // Le callback appellera en interne DUAL_XXX_Destroy qui déclenchera Untrack
-            current->callback_destruction(manager, current->ptr_ressource);
-        } else {
-            if (current->nom_debug) free(current->nom_debug);
-            free(current);
-        }
-        current = next;
-    }
+    // A CHANGER AVEC LES HASHMAPS
 }
 
-DUAL_Result DUAL_ResourceManager_Track(DUAL_ResourceManager* manager,
-                                        DUAL_MemoryType type,
-                                        DUAL_ResourceCategory categorie,
-                                        uint64_t taille_octets,
-                                        const char* nom_debug,
-                                        DUAL_ResourceHandle** out_handle) {
-    if (!manager || !out_handle) return DUAL_ERROR_INVALID_ARG;
-
-    // Vérification des budgets mémoire
-    if (type == DUAL_MEMORY_VRAM) {
-        if (manager->vram_utilisee + taille_octets > manager->vram_totale) {
-            return DUAL_ERROR_OUT_OF_MEMORY;
-        }
-        manager->vram_utilisee += taille_octets;
-    } else {
-        if (manager->ram_utilisee + taille_octets > manager->ram_totale) {
-            return DUAL_ERROR_OUT_OF_MEMORY;
-        }
-        manager->ram_utilisee += taille_octets;
-    }
-
-    DUAL_ResourceHandle* handle = (DUAL_ResourceHandle*)malloc(sizeof(DUAL_ResourceHandle));
-    if (!handle) {
-        // Rembobinage de l'allocation virtuelle en cas d'échec
-        if (type == DUAL_MEMORY_VRAM) manager->vram_utilisee -= taille_octets;
-        else manager->ram_utilisee -= taille_octets;
-        return DUAL_ERROR_OUT_OF_MEMORY;
-    }
-
-    handle->type = type;
-    handle->categorie = categorie;
-    handle->taille_octets = taille_octets;
-    handle->nom_debug = DuplicateString(nom_debug);
-    handle->ptr_ressource = NULL;
-    handle->callback_destruction = NULL;
-
-    // Ajout en tête de la liste chaînée
-    handle->prev = NULL;
-    handle->next = manager->head;
-    if (manager->head) {
-        manager->head->prev = handle;
-    }
-    manager->head = handle;
-    manager->nombre_ressources++;
-
-    *out_handle = handle;
-    return DUAL_OK;
-}
-
-void DUAL_ResourceManager_Untrack(DUAL_ResourceManager* manager, DUAL_ResourceHandle* handle) {
-    if (!manager || !handle) return;
-
-    // Libération des budgets
-    if (handle->type == DUAL_MEMORY_VRAM) {
-        manager->vram_utilisee = (manager->vram_utilisee > handle->taille_octets) ? 
-                                 manager->vram_utilisee - handle->taille_octets : 0;
-    } else {
-        manager->ram_utilisee = (manager->ram_utilisee > handle->taille_octets) ? 
-                                 manager->ram_utilisee - handle->taille_octets : 0;
-    }
-
-    // Retrait de la liste chaînée
-    if (handle->prev) handle->prev->next = handle->next;
-    else manager->head = handle->next;
-
-    if (handle->next) handle->next->prev = handle->prev;
-
-    if (manager->nombre_ressources > 0) manager->nombre_ressources--;
-
-    if (handle->nom_debug) free(handle->nom_debug);
-    free(handle);
-}
 
 void DUAL_ResourceManager_GetStats(const DUAL_ResourceManager* manager, DUAL_MemoryStats* out_stats) {
     if (!manager || !out_stats) return;
@@ -190,23 +193,9 @@ void DUAL_ResourceManager_SetRAMBudget(DUAL_ResourceManager* manager, uint64_t l
 void DUAL_ResourceManager_PurgeCategory(DUAL_ResourceManager* manager, DUAL_ResourceCategory categorie) {
     if (!manager) return;
 
-    DUAL_ResourceHandle* current = manager->head;
-    while (current != NULL) {
-        DUAL_ResourceHandle* next = current->next;
-        if (current->categorie == categorie && current->callback_destruction && current->ptr_ressource) {
-            current->callback_destruction(manager, current->ptr_ressource);
-        }
-        current = next;
-    }
+    // A CHANGER AVEC LES HASHMAPS
 }
 
-/* Fonction interne (partagée via extern) pour lier l'asset au handle */
-void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void* ptr_ressource, void (*callback_destruction)(DUAL_ResourceManager*, void*)) {
-    if (handle) {
-        handle->ptr_ressource = ptr_ressource;
-        handle->callback_destruction = callback_destruction;
-    }
-}
 
 void DUAL_ResourceManager_Log(DUAL_ResourceManager* manager) {
     if (!manager) return;

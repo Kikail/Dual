@@ -24,10 +24,6 @@ uint8_t* get_pixel_image(DUAL_ResourceManager* resourceManager) {
         return NULL;
     }
 
-    DUAL_ResourceHandle* handle = NULL;
-    DUAL_Result result = DUAL_ResourceManager_Track(resourceManager, DUAL_MEMORY_RAM, DUAL_RESOURCE_AUTRE, IMAGE_SIZE, "cat_pixels", &handle);
-    DEBUG_DUAL_RESULT(result);
-
     // 2. Remplissage du buffer avec un motif (ici, un dégradé orange/rose "couleur chat")
     // Dans un vrai projet, ces données proviendraient d'un fichier .h généré ou d'un décodeur
     for (int y = 0; y < IMAGE_HEIGHT; y++) {

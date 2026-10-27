@@ -7,10 +7,7 @@
 #include <stdint.h>
 
 #include <glad/glad.h>
-
-#include <assimp/cimport.h>
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
+#include <glib.h>
 
 #include "../../include/DUAL_Graphics/dual_graphics_3d.h"
 #include "../../include/DUAL_Graphics/dual_graphics_2d.h"
@@ -19,93 +16,12 @@
 #include "../../include/DUAL_Core/dual_core.h"
 #include "../../include/DUAL_Resources/dual_resources.h"
 #include "../../include/dual_utils.h"
-#include "../../include/DUAL_Graphics/camera3d.h"
+
 
 extern void   DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h);
 extern GLuint DUAL_Internal_GetTextureID(const DUAL_Texture* texture);
 
-#define DUAL_MAX_LIGHTS_3D 4
-#define MAX_BONE_INFLUENCE 4
-#define MAX_BONES 100
-#define TWO_PI_F 6.28318530718f
 
-typedef struct {
-    char* name;
-    int id;
-    DUAL_Mat4 offset;
-} BoneInfo;
-
-struct DUAL_Mesh {
-    GLuint   vao, vbo, ebo;
-    uint32_t index_count;
-    uint32_t material_index;
-};
-
-struct DUAL_Model {
-    DUAL_Mesh* meshes;
-    uint32_t   mesh_count;
-    DUAL_AABB  bounding_box_local;
-    DUAL_ResourceHandle* handle;
-
-    DUAL_Material** materials;
-    unsigned int material_count;
-
-    BoneInfo* m_BoneInfoMap;
-    int m_BoneCounter;
-    int m_BoneMapCapacity;
-};
-
-struct DUAL_Material {
-    DUAL_Texture* texture_diffuse;
-    DUAL_ResourceHandle* handle;
-};
-
-struct Internal_Shaders3d_s {
-    DUAL_Shader shader_lit;
-    DUAL_Shader shader_unlit;
-    DUAL_Shader shader_skeleton;
-    DUAL_Shader shader_skeleton_unlit;
-    DUAL_Shader shader_debug;
-    DUAL_Shader shader_billboard;
-};
-
-struct DUAL_Renderer3D {
-    DUAL_App* app;
-
-    DUAL_Shader* current_shader;
-    struct Internal_Shaders3d_s shaders;
-
-    GLuint ubo_bones;
-
-    DUAL_RenderMode3D render_mode;
-
-    DUAL_Camera3D camera;
-
-    DUAL_ProjectionMode3D projection_mode;
-    DUAL_Mat4 perspective_projection;
-    DUAL_Mat4 orthographic_projection;
-    float fov_radians;
-    float ortho_demi_hauteur;
-    float plan_proche;
-    float plan_lointain;
-
-    DUAL_CullMode cull_mode;
-
-    DUAL_Vec3  ambient_light;
-    DUAL_Light lights[DUAL_MAX_LIGHTS_3D];
-
-    GLuint billboard_vbo, billboard_vao;
-
-    DUAL_DebugRenderer3D debug_renderer;
-};
-
-typedef struct {
-    DUAL_Vec3 position;
-    DUAL_Vec3 normale;
-    DUAL_Vec2 tex_coords;
-    float   m_Weights[MAX_BONE_INFLUENCE];
-    int32_t m_BoneIDs[MAX_BONE_INFLUENCE];
-} Vertex3D;
 
 #define LIGHT_UNIFORMS(i) { \
     "uLights[" #i "].type", "uLights[" #i "].position", "uLights[" #i "].direction", \
@@ -439,7 +355,7 @@ static const struct aiScene* ImportModelScene(const char* path) {
 }
 
 static DUAL_Result BuildModel(DUAL_ResourceManager* resources, const char* chemin_fichier, const struct aiScene* scene, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials) {
-    DUAL_Model* model = calloc(1, sizeof(struct DUAL_Model));
+    DUAL_Model* model = calloc(1, sizeof(DUAL_Model));
     if (!model) return DUAL_ERROR_OUT_OF_MEMORY;
 
     model->mesh_count = scene->mNumMeshes;
@@ -484,7 +400,7 @@ static DUAL_Result BuildModel(DUAL_ResourceManager* resources, const char* chemi
             DUAL_Material_Create(resources, texture, &model->materials[i]);
         }
     }
-    model->handle
+
     if (out_material_count) *out_material_count = model->material_count;
     if (out_materials) *out_materials = model->materials;
 
@@ -570,12 +486,28 @@ static DUAL_Result BuildModel(DUAL_ResourceManager* resources, const char* chemi
     model->bounding_box_local.min = bb_min;
     model->bounding_box_local.max = bb_max;
 
+    strcpy(model->model_path, chemin_fichier);
+    DUAL_GetFilenameWithoutExtension(chemin_fichier, model->model_name, 32);
+    DUAL_ResourceManager_AddResource((DUAL_ResourceManager*)resources, model, DUAL_RESOURCE_MODEL_3D);
+
     *out_model = model;
     return DUAL_OK;
 }
 
 DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials) {
     if (!chemin_fichier || !out_model) return DUAL_ERROR_INVALID_ARG;
+
+    char model_name[32];
+    DUAL_GetFilenameWithoutExtension(chemin_fichier, model_name, sizeof(model_name));
+
+    DUAL_Model* existing_model = DUAL_ResourceManager_GetModel(resources, model_name);
+    if (existing_model != NULL) {
+        *out_model = existing_model;
+        if (out_material_count) *out_material_count = existing_model->material_count;
+        if (out_materials) *out_materials = existing_model->materials;
+        DUAL_Log(DUAL_LOG_WARNING, "%s est deja charge", model_name);
+        return DUAL_OK;
+    }
 
     const struct aiScene* scene = ImportModelScene(chemin_fichier);
     if (!scene) return DUAL_ERROR_NOT_FOUND;
@@ -585,8 +517,7 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
     return result;
 }
 
-void DUAL_Model_Destroy(DUAL_ResourceManager* resources, DUAL_Model* model) {
-    (void)resources;
+void DUAL_Model_Destroy(DUAL_Model* model) {
     if (!model) return;
     if (model->meshes) {
         for (uint32_t i = 0; i < model->mesh_count; i++) {
@@ -618,22 +549,20 @@ uint32_t DUAL_Model_GetMeshCount(const DUAL_Model* model) {
 DUAL_Result DUAL_Material_Create(DUAL_ResourceManager* resources, DUAL_Texture* texture_diffuse, DUAL_Material** out_material) {
     (void)resources;
     if (!out_material) return DUAL_ERROR_INVALID_ARG;
-    DUAL_Material* mat = malloc(sizeof(struct DUAL_Material));
+    DUAL_Material* mat = malloc(sizeof(DUAL_Material));
     if (!mat) return DUAL_ERROR_OUT_OF_MEMORY;
     mat->texture_diffuse = texture_diffuse;
-    mat->handle = NULL;
     *out_material = mat;
     return DUAL_OK;
 }
 
-void DUAL_Material_Destroy(DUAL_ResourceManager* resources, DUAL_Material* material) {
-    (void)resources;
+void DUAL_Material_Destroy(DUAL_Material* material) {
     free(material);
 }
 
 DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer) {
     if (!app || !out_renderer) return DUAL_ERROR_INVALID_ARG;
-    DUAL_Renderer3D* renderer = calloc(1, sizeof(struct DUAL_Renderer3D));
+    DUAL_Renderer3D* renderer = calloc(1, sizeof(DUAL_Renderer3D));
     if (!renderer) return DUAL_ERROR_OUT_OF_MEMORY;
     renderer->app = app;
 
@@ -1038,7 +967,7 @@ DUAL_Result DUAL_AnimatedModel_Create(DUAL_ResourceManager* resources, const cha
         anim_model->animations = calloc(anim_model->animation_count, sizeof(Animation*));
         if (!anim_model->animations) {
             aiReleaseImport(scene);
-            DUAL_Model_Destroy(resources, anim_model->model);
+            DUAL_Model_Destroy(anim_model->model);
             free(anim_model);
             return DUAL_ERROR_OUT_OF_MEMORY;
         }
@@ -1055,6 +984,11 @@ DUAL_Result DUAL_AnimatedModel_Create(DUAL_ResourceManager* resources, const cha
 
     aiReleaseImport(scene);
     *out_animated_model = anim_model;
+
+    strcpy((*out_animated_model)->model_path, glb_path);
+    DUAL_GetFilenameWithoutExtension(glb_path, (*out_animated_model)->model_name, 32);
+    DUAL_ResourceManager_AddResource((DUAL_ResourceManager*)resources, *out_animated_model, DUAL_RESOURCE_MODEL_3D);
+
     return DUAL_OK;
 }
 
@@ -1070,7 +1004,7 @@ void DUAL_AnimatedModel_Update(DUAL_Animated_Model* anim_model, float dt) {
     Animator_UpdateAnimation(&anim_model->animator, dt);
 }
 
-void DUAL_AnimatedModel_Destroy(DUAL_ResourceManager* resources, DUAL_Animated_Model* anim_model) {
+void DUAL_AnimatedModel_Destroy(DUAL_Animated_Model* anim_model) {
     if (!anim_model) return;
     if (anim_model->animations) {
         for (unsigned int i = 0; i < anim_model->animation_count; i++) {
@@ -1079,7 +1013,7 @@ void DUAL_AnimatedModel_Destroy(DUAL_ResourceManager* resources, DUAL_Animated_M
         free(anim_model->animations);
     }
     if (anim_model->model) {
-        DUAL_Model_Destroy(resources, anim_model->model);
+        DUAL_Model_Destroy(anim_model->model);
     }
     free(anim_model);
 }

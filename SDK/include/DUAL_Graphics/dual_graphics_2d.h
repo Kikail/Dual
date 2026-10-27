@@ -15,9 +15,12 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+
+#include "stb_truetype.h"
 #include "../DUAL_Core/dual_core.h"
 #include "../DUAL_Math/dual_math.h"
-#include "../DUAL_Resources/dual_resources.h"
+#include "../../include/DUAL_Graphics/camera2d.h"
+#include "../../include/DUAL_Graphics/shader.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,28 +30,52 @@ extern "C" {
  *  Types opaques
  * ========================================================================== */
 
-/**
- * @brief Représente une texture chargée en VRAM, prête à être dessinée.
- *
- * L'implémentation réelle (identifiant de texture OpenGL, format interne,
- * mipmaps) est entièrement cachée au développeur.
- */
-typedef struct DUAL_Texture DUAL_Texture;
+typedef struct DUAL_ResourceManager DUAL_ResourceManager;
 
-/**
- * @brief Représente une police bitmap ou vectorielle chargée, utilisée pour
- *        le rendu de texte à l'écran.
- */
-typedef struct DUAL_Font DUAL_Font;
+typedef struct DUAL_Texture{
+    GLuint id_opengl;
+    int32_t largeur;
+    int32_t hauteur;
+    char texture_name[32];
+    char texture_path[128];
+}DUAL_Texture;
 
-/**
- * @brief Contexte de rendu 2D, responsable du batching des sprites et de la
- *        gestion de la caméra 2D pour un écran donné.
- */
-typedef struct DUAL_Renderer2D DUAL_Renderer2D;
+typedef struct DUAL_Font{
+    DUAL_Texture* texture_atlas;
+    float taille_pixels;
+    stbtt_bakedchar données_caractères[96];
 
-typedef struct DUAL_Shader DUAL_Shader;
-typedef struct DUAL_Camera2D DUAL_Camera2D;
+    char font_name[32];
+    char font_path[128];
+}DUAL_Font;
+
+typedef struct Vertex2D{
+    DUAL_Vec2 position;
+    DUAL_Vec2 tex_coords;
+    DUAL_Color couleur;
+} Vertex2D;
+
+
+typedef struct Internal_Shaders2d_s{
+    DUAL_Shader base_shader;
+}Internal_Shaders2d_s ;
+
+typedef struct DUAL_Renderer2D{
+    DUAL_App* app;
+    GLuint vao, vbo;
+
+    DUAL_Shader* current_shader;
+    Internal_Shaders2d_s shaders;
+
+    // Caméra
+    DUAL_Camera2D camera;
+
+    // Système de Batching
+    Vertex2D* vertex_buffer;
+    uint32_t vertex_count;
+    uint32_t max_vertices;
+    DUAL_Texture* texture_courante;
+}DUAL_Renderer2D;
 
 /* ============================================================================
  *  Enumérations
@@ -141,7 +168,7 @@ DUAL_Result DUAL_Texture_LoadFromMemory(DUAL_ResourceManager* resources,
  * @param resources Gestionnaire de ressources ayant suivi l'allocation.
  * @param texture Texture à libérer.
  */
-void DUAL_Texture_Destroy(DUAL_ResourceManager* resources, DUAL_Texture* texture);
+void DUAL_Texture_Destroy(DUAL_Texture* texture);
 
 /**
  * @brief Retourne les dimensions natives d'une texture chargée.
@@ -252,7 +279,7 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources,
  * @param resources Gestionnaire de ressources ayant suivi l'allocation.
  * @param font Police à libérer.
  */
-void DUAL_Font_Destroy(DUAL_ResourceManager* resources, DUAL_Font* font);
+void DUAL_Font_Destroy(DUAL_Font* font);
 
 /**
  * @brief Dessine une chaîne de texte à une position donnée, avec une police

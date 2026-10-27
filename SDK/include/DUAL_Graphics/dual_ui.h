@@ -8,7 +8,6 @@
 #include "./dual_graphics_2d.h"
 #include "../DUAL_Math/dual_math.h"
 #include "../DUAL_Core/dual_core.h"
-#include "../DUAL_Resources/dual_resources.h"
 
 typedef struct DUAL_UserInterface {
     DUAL_Font* font;

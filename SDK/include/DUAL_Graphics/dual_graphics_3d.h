@@ -9,9 +9,12 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <assimp/cimport.h>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 #include "../DUAL_Core/dual_core.h"
 #include "../DUAL_Math/dual_math.h"
-#include "../DUAL_Resources/dual_resources.h"
+#include "../../include/DUAL_Graphics/camera3d.h"
 #include "dual_graphics_2d.h"
 
 #ifdef __cplusplus
@@ -26,49 +29,16 @@ extern "C" {
 
 
 
-typedef struct DUAL_Mesh DUAL_Mesh;
-typedef struct DUAL_Model DUAL_Model;
-typedef struct DUAL_Material DUAL_Material;
-typedef struct DUAL_Renderer3D DUAL_Renderer3D;
-typedef struct KeyPosition KeyPosition;
-typedef struct KeyRotation KeyRotation;
-typedef struct KeyScale KeyScale;
-typedef struct Bone Bone;
-typedef struct AssimpNodeData AssimpNodeData;
-typedef struct Animation Animation;
-typedef struct Animator Animator;
-typedef struct DUAL_Shader DUAL_Shader;
-typedef struct DUAL_Camera3D DUAL_Camera3D;
-
-/* ============================================================================
- *  Énumérations
- * ========================================================================== */
+#define DUAL_MAX_LIGHTS_3D 4
+#define MAX_BONE_INFLUENCE 4
+#define MAX_BONES 100
+#define TWO_PI_F 6.28318530718f
+#define DUAL_DEBUG_MAX_VERTICES 20000
 
 typedef enum DUAL_LightType {
     DUAL_LIGHT_DIRECTIONAL = 0,
     DUAL_LIGHT_POINT       = 1
 } DUAL_LightType;
-
-typedef enum DUAL_ProjectionMode3D {
-    DUAL_PROJECTION_PERSPECTIVE  = 0,
-    DUAL_PROJECTION_ORTHOGRAPHIC = 1
-} DUAL_ProjectionMode3D;
-
-typedef enum DUAL_CullMode {
-    DUAL_CULL_BACK  = 0,
-    DUAL_CULL_FRONT = 1,
-    DUAL_CULL_NONE  = 2
-} DUAL_CullMode;
-
-typedef enum DUAL_RenderMode3D {
-    DUAL_RENDER_LIT       = 0,
-    DUAL_RENDER_UNLIT     = 1,
-    DUAL_RENDER_WIREFRAME = 2
-} DUAL_RenderMode3D;
-
-/* ============================================================================
- *  Structures
- * ========================================================================== */
 
 typedef struct DUAL_Light {
     DUAL_LightType type;
@@ -87,22 +57,22 @@ typedef struct DUAL_Transform3D {
 
 /* Structures de gestion de l'animation */
 
-struct KeyPosition {
+typedef struct KeyPosition{
     DUAL_Vec3 position;
     float timeStamp;
-};
+}KeyPosition;
 
-struct KeyRotation {
+typedef struct KeyRotation{
     DUAL_Quat orientation;
     float timeStamp;
-};
+}KeyRotation;
 
-struct KeyScale {
+typedef struct KeyScale{
     DUAL_Vec3 scale;
     float timeStamp;
-};
+}KeyScale;
 
-struct Bone {
+typedef struct Bone{
     KeyPosition* m_Positions;
     KeyRotation* m_Rotations;
     KeyScale*    m_Scales;
@@ -113,33 +83,15 @@ struct Bone {
     DUAL_Mat4 m_LocalTransform;
     char* m_Name;
     int m_ID;
-};
+}Bone;
 
-struct AssimpNodeData {
+typedef struct AssimpNodeData {
     DUAL_Mat4 transformation;
     char* name;
     int childrenCount;
     struct AssimpNodeData* children;
-};
+}AssimpNodeData;
 
-struct Animation {
-    float m_Duration;
-    int m_TicksPerSecond;
-
-    Bone* m_Bones;
-    int m_NumBones;
-
-    AssimpNodeData m_RootNode;
-
-    DUAL_Model* m_LinkedModel;
-};
-
-struct Animator {
-    DUAL_Mat4 m_FinalBoneMatrices[MAX_BONES];
-    Animation* m_CurrentAnimation;
-    float m_CurrentTime;
-    float m_DeltaTime;
-};
 
 typedef enum DUAL_Renderer3d_Shaders {
     SHADER3D_LIT,
@@ -149,11 +101,154 @@ typedef enum DUAL_Renderer3d_Shaders {
     SHADER3D_SHADER_DEBUG
 }DUAL_Renderer3d_Shaders;
 
-typedef struct {
+typedef enum DUAL_ProjectionMode3D {
+    DUAL_PROJECTION_PERSPECTIVE  = 0,
+    DUAL_PROJECTION_ORTHOGRAPHIC = 1
+} DUAL_ProjectionMode3D;
+
+typedef enum DUAL_CullMode {
+    DUAL_CULL_BACK  = 0,
+    DUAL_CULL_FRONT = 1,
+    DUAL_CULL_NONE  = 2
+} DUAL_CullMode;
+
+typedef enum DUAL_RenderMode3D {
+    DUAL_RENDER_LIT       = 0,
+    DUAL_RENDER_UNLIT     = 1,
+    DUAL_RENDER_WIREFRAME = 2
+} DUAL_RenderMode3D;
+
+typedef struct LineVertex{
+    DUAL_Vec3 position;
+    DUAL_Vec3 color;
+} LineVertex;
+
+typedef struct DUAL_DebugRenderer3D{
+    GLuint vao, vbo;
+    LineVertex vertices[DUAL_DEBUG_MAX_VERTICES];
+    uint32_t capacity;
+    uint32_t count;
+} DUAL_DebugRenderer3D;
+
+typedef struct BoneInfo{
+    char* name;
+    int id;
+    DUAL_Mat4 offset;
+} BoneInfo;
+
+typedef struct DUAL_Mesh{
+    GLuint   vao, vbo, ebo;
+    uint32_t index_count;
+    uint32_t material_index;
+}DUAL_Mesh;
+
+typedef struct DUAL_Material{
+    DUAL_Texture* texture_diffuse;
+}DUAL_Material;
+
+typedef struct DUAL_Model{
+    DUAL_Mesh* meshes;
+    uint32_t   mesh_count;
+    DUAL_AABB  bounding_box_local;
+
+    DUAL_Material** materials;
+    unsigned int material_count;
+
+    BoneInfo* m_BoneInfoMap;
+    int m_BoneCounter;
+    int m_BoneMapCapacity;
+
+    char model_name[32];
+    char model_path[128];
+}DUAL_Model;
+
+
+typedef struct Animation{
+    float m_Duration;
+    int m_TicksPerSecond;
+
+    Bone* m_Bones;
+    int m_NumBones;
+
+    AssimpNodeData m_RootNode;
+
+    DUAL_Model* m_LinkedModel;
+}Animation;
+
+typedef struct Animator{
+    DUAL_Mat4 m_FinalBoneMatrices[MAX_BONES];
+    Animation* m_CurrentAnimation;
+    float m_CurrentTime;
+    float m_DeltaTime;
+}Animator;
+
+typedef struct Internal_Shaders3d_s{
+    DUAL_Shader shader_lit;
+    DUAL_Shader shader_unlit;
+    DUAL_Shader shader_skeleton;
+    DUAL_Shader shader_skeleton_unlit;
+    DUAL_Shader shader_debug;
+    DUAL_Shader shader_billboard;
+}Internal_Shaders3d_s;
+
+typedef struct DUAL_Renderer3D{
+    DUAL_App* app;
+
+    DUAL_Shader* current_shader;
+    Internal_Shaders3d_s shaders;
+
+    GLuint ubo_bones;
+
+    DUAL_RenderMode3D render_mode;
+
+    DUAL_Camera3D camera;
+
+    DUAL_ProjectionMode3D projection_mode;
+    DUAL_Mat4 perspective_projection;
+    DUAL_Mat4 orthographic_projection;
+    float fov_radians;
+    float ortho_demi_hauteur;
+    float plan_proche;
+    float plan_lointain;
+
+    DUAL_CullMode cull_mode;
+
+    DUAL_Vec3  ambient_light;
+    DUAL_Light lights[DUAL_MAX_LIGHTS_3D];
+
+    GLuint billboard_vbo, billboard_vao;
+
+    DUAL_DebugRenderer3D debug_renderer;
+}DUAL_Renderer3D;
+
+typedef struct Vertex3D{
+    DUAL_Vec3 position;
+    DUAL_Vec3 normale;
+    DUAL_Vec2 tex_coords;
+    float   m_Weights[MAX_BONE_INFLUENCE];
+    int32_t m_BoneIDs[MAX_BONE_INFLUENCE];
+} Vertex3D;
+
+/* ============================================================================
+ *  Énumérations
+ * ========================================================================== */
+
+
+
+/* ============================================================================
+ *  Structures
+ * ========================================================================== */
+
+
+
+typedef struct DUAL_Animated_Model{
     DUAL_Model* model;
     Animation** animations;
     unsigned int animation_count;
     Animator animator;
+
+    char model_name[32];
+    char model_path[128];
 }DUAL_Animated_Model;
 
 
@@ -164,7 +259,7 @@ DUAL_Camera3D* DUAL_Renderer3D_GetCamera(DUAL_Renderer3D* renderer);
  * ========================================================================== */
 
 DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials);
-void DUAL_Model_Destroy(DUAL_ResourceManager* resources, DUAL_Model* model);
+void DUAL_Model_Destroy(DUAL_Model* model);
 DUAL_AABB DUAL_Model_GetBoundingBox(const DUAL_Model* model);
 uint32_t DUAL_Model_GetMeshCount(const DUAL_Model* model);
 
@@ -173,7 +268,7 @@ uint32_t DUAL_Model_GetMeshCount(const DUAL_Model* model);
  * ========================================================================== */
 
 DUAL_Result DUAL_Material_Create(DUAL_ResourceManager* resources, DUAL_Texture* texture_diffuse, DUAL_Material** out_material);
-void DUAL_Material_Destroy(DUAL_ResourceManager* resources, DUAL_Material* material);
+void DUAL_Material_Destroy(DUAL_Material* material);
 
 /* ============================================================================
  *  Animations & Bones
@@ -224,20 +319,6 @@ void DUAL_Renderer3d_SendLightInfosToShader(DUAL_Renderer3D* renderer, DUAL_Shad
  *  Debug
  * ========================================================================== */
 
-#define DUAL_DEBUG_MAX_VERTICES 20000
-
-typedef struct {
-    DUAL_Vec3 position;
-    DUAL_Vec3 color;
-} LineVertex;
-
-typedef struct {
-    GLuint vao, vbo;
-    LineVertex vertices[DUAL_DEBUG_MAX_VERTICES];
-    uint32_t capacity;
-    uint32_t count;
-} DUAL_DebugRenderer3D;
-
 void DUAL_Debug_DrawLine(DUAL_Renderer3D* debug, DUAL_Vec3 start, DUAL_Vec3 end, DUAL_Vec3 color);
 void DUAL_Debug_DrawCircle(DUAL_Renderer3D* debug, DUAL_Vec3 center, float radius, int segments, DUAL_Vec3 color);
 void DUAL_Debug_DrawAABB(DUAL_Renderer3D* debug, DUAL_AABB box, DUAL_Vec3 color);
@@ -250,7 +331,7 @@ void DUAL_Debug_Draw_Model_BoundingBox(DUAL_Renderer3D* debug, DUAL_AABB box, DU
 DUAL_Result DUAL_AnimatedModel_Create(DUAL_ResourceManager* resources, const char* glb_path, DUAL_Animated_Model** out_animated_model);
 void DUAL_AnimatedModel_PlayAnimation(DUAL_Animated_Model* anim_model, unsigned int index);
 void DUAL_AnimatedModel_Update(DUAL_Animated_Model* anim_model, float dt);
-void DUAL_AnimatedModel_Destroy(DUAL_ResourceManager* resources, DUAL_Animated_Model* anim_model);
+void DUAL_AnimatedModel_Destroy(DUAL_Animated_Model* anim_model);
 
 void DUAL_Debug_Transform(DUAL_Transform3D transform);
 void DUAL_Debug_Vec3(DUAL_Vec3 vector);

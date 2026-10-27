@@ -1,61 +1,11 @@
 #define MINIAUDIO_IMPLEMENTATION
 #define MA_ENABLE_OPUS
-#include "miniaudio.h"
-
 #include "../../include/DUAL_Audio/dual_audio.h"
 #include "../../include/DUAL_Resources/dual_resources.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#define DUAL_MAX_SOUND_INSTANCES 256
-
-/* ============================================================================
- * Structures internes
- * ========================================================================== */
-
-
-typedef struct DUAL_SoundInstance {
-    ma_sound sound;
-    ma_audio_buffer_ref bufferRef;
-    bool inUse;
-    bool initialized;
-    const DUAL_Sound* source;
-} DUAL_SoundInstance;
-
-struct DUAL_AudioManager {
-    DUAL_App* app;
-    ma_engine engine;
-    bool engineInitialized;
-
-    ma_sound_group sfxGroup;
-    ma_sound_group musicGroup;
-    ma_sound_group voiceGroup;
-    bool sfxGroupInitialized;
-    bool musicGroupInitialized;
-    bool voiceGroupInitialized;
-
-    DUAL_SoundInstance instancePool[DUAL_MAX_SOUND_INSTANCES];
-};
-
-struct DUAL_Sound {
-    void* pData;
-    size_t dataSize;
-    ma_audio_buffer buffer;
-    ma_uint32 channels;
-    ma_uint32 sampleRate;
-    ma_uint64 frameCount;
-    bool estVoix;
-    DUAL_AudioManager* owningAudio;
-    DUAL_ResourceHandle* resourceHandle;
-};
-
-struct DUAL_Music {
-    ma_sound sound;
-    bool initialized;
-    bool boucle;
-    DUAL_ResourceHandle* resourceHandle;
-};
 
 /* ============================================================================
  * Utilitaires internes
@@ -84,14 +34,12 @@ static void DUAL_Internal_ReleaseInstanceSlot(DUAL_SoundInstance* slot) {
 }
 
 static void DUAL_Internal_Sound_DestroyCallback(DUAL_ResourceManager* resources, void* ptr) {
-    DUAL_Sound_Destroy(resources, (DUAL_Sound*)ptr);
+    DUAL_Sound_Destroy((DUAL_Sound*)ptr);
 }
 
 static void DUAL_Internal_Music_DestroyCallback(DUAL_ResourceManager* resources, void* ptr) {
     DUAL_Music_Close(resources, (DUAL_Music*)ptr);
 }
-
-extern void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void* ptr_ressource, void (*callback_destruction)(DUAL_ResourceManager*, void*));
 
 /* ============================================================================
  * Cycle de vie du gestionnaire audio
@@ -297,19 +245,9 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
 
     size_t finalDataSize = (size_t)framesDecoded * bytesPerFrame;
 
-    DUAL_ResourceHandle* handle = NULL;
-    DUAL_Result trackResult = DUAL_ResourceManager_Track(resources, DUAL_MEMORY_RAM, DUAL_RESOURCE_SOUND, (uint64_t)finalDataSize, chemin_fichier, &handle);
-    if (trackResult != DUAL_OK) {
-        free(pData);
-        return trackResult;
-    }
 
     DUAL_Sound* sound = (DUAL_Sound*)calloc(1, sizeof(DUAL_Sound));
-    if (!sound) {
-        free(pData);
-        DUAL_ResourceManager_Untrack(resources, handle);
-        return DUAL_ERROR_OUT_OF_MEMORY;
-    }
+
 
     ma_audio_buffer_config bufferConfig = ma_audio_buffer_config_init(
         ma_format_f32,
@@ -325,7 +263,6 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
         DUAL_Log(DUAL_LOG_ERROR, "DUAL_Sound_LoadFromFile: ma_audio_buffer_init a echoue (code %d)", (int)maResult);
         free(pData);
         free(sound);
-        DUAL_ResourceManager_Untrack(resources, handle);
         return DUAL_ERROR_INIT_FAILED;
     }
 
@@ -337,15 +274,17 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
     sound->sampleRate = sampleRate;
     sound->frameCount = framesDecoded;
     sound->owningAudio = audio;
-    sound->resourceHandle = handle;
-
-    DUAL_Internal_ResourceHandle_SetCallback(handle, sound, DUAL_Internal_Sound_DestroyCallback);
 
     *out_sound = sound;
+
+    strcpy((*out_sound)->sound_path, chemin_fichier);
+    DUAL_GetFilenameWithoutExtension(chemin_fichier, (*out_sound)->sound_name, 32);
+    DUAL_ResourceManager_AddResource(resources, *out_sound, DUAL_RESOURCE_SOUND);
+
     return DUAL_OK;
 }
 
-void DUAL_Sound_Destroy(DUAL_ResourceManager* resources, DUAL_Sound* sound) {
+void DUAL_Sound_Destroy(DUAL_Sound* sound) {
     if (!sound) return;
 
     if (sound->owningAudio) {
@@ -363,10 +302,6 @@ void DUAL_Sound_Destroy(DUAL_ResourceManager* resources, DUAL_Sound* sound) {
     if (sound->pData) {
         free(sound->pData);
         sound->pData = NULL;
-    }
-
-    if (resources && sound->resourceHandle) {
-        DUAL_ResourceManager_Untrack(resources, sound->resourceHandle);
     }
 
     free(sound);
@@ -473,17 +408,6 @@ DUAL_Result DUAL_Music_OpenFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
     music->initialized = true;
     music->boucle = false;
 
-    DUAL_ResourceHandle* handle = NULL;
-    DUAL_Result trackResult = DUAL_ResourceManager_Track(resources, DUAL_MEMORY_RAM, DUAL_RESOURCE_MUSIC, (uint64_t)sizeof(DUAL_Music), chemin_fichier, &handle);
-    if (trackResult != DUAL_OK) {
-        ma_sound_uninit(&music->sound);
-        free(music);
-        return trackResult;
-    }
-
-    music->resourceHandle = handle;
-    DUAL_Internal_ResourceHandle_SetCallback(handle, music, DUAL_Internal_Music_DestroyCallback);
-
     *out_music = music;
     return DUAL_OK;
 }
@@ -496,9 +420,6 @@ void DUAL_Music_Close(DUAL_ResourceManager* resources, DUAL_Music* music) {
         music->initialized = false;
     }
 
-    if (resources && music->resourceHandle) {
-        DUAL_ResourceManager_Untrack(resources, music->resourceHandle);
-    }
 
     free(music);
 }

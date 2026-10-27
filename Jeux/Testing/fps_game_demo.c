@@ -4,6 +4,7 @@
 
 #include "../../SDK/include/DUAL_Editor/dual_scene_loader.h"
 #include "../../SDK/include/DUAL_FS/dual_fs.h"
+#include "../../SDK/include/DUAL_Resources/dual_resources.h"
 #include "../../SDK/include/dual_utils.h"
 #include "DUAL_Input/dual_input.h"
 
@@ -14,9 +15,10 @@ void game_charger_scene(char* filepath, DUAL_Editor_Scene* output) {
     DUAL_LoadFile(filepath, new_buffer, filesize);
     unsigned int buffer_offset_scene = 0;
     charger_scene(output, new_buffer, &buffer_offset_scene);
+    afficher_scene(output);
 }
 
-void game_charger_ressources(DUAL_ResourceManager* resource_manager, DUAL_Editor_Scene* scene) {
+void game_charger_ressources(struct DUAL_ResourceManager* resource_manager, DUAL_Editor_Scene* scene) {
     for (int i = 0; i < scene->numEntities; i++) {
         DUAL_Editor_SceneEntity* entity = getEntity(scene, i);
         if (entity->type == MODEL) {
@@ -85,12 +87,30 @@ int main() {
     DUAL_InputManager* inputManager = NULL;
     DUAL_InputManager_Create(app, &inputManager);
 
+    DUAL_SetScreenClearColor(app, DUAL_SCREEN_MAIN, DUAL_COLOR_BLUE);
+
     while (DUAL_ShouldRun(app)) {
         DUAL_BeginFrame(app);
 
 
         // On actualise les inputs
         DUAL_InputManager_Update(inputManager);
+        if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_UP)) {
+            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
+            DUAL_Camera3D_ProcessKeyboard(cam, FORWARD, DUAL_GetDeltaTime(app));
+        }
+        if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_DOWN)) {
+            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
+            DUAL_Camera3D_ProcessKeyboard(cam, BACKWARD, DUAL_GetDeltaTime(app));
+        }
+        if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_LEFT)) {
+            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
+            DUAL_Camera3D_ProcessKeyboard(cam, LEFT, DUAL_GetDeltaTime(app));
+        }
+        if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_RIGHT)) {
+            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
+            DUAL_Camera3D_ProcessKeyboard(cam, RIGHT, DUAL_GetDeltaTime(app));
+        }
 
 
         // On actualise les donnees du monde ici
@@ -101,7 +121,20 @@ int main() {
         DUAL_Renderer3D_Begin(renderer3D);
 
         // Code pour dessiner dans notre renderer
+        for (int i = 0; i < scene.numEntities; i++) {
+            DUAL_Editor_SceneEntity* entity = getEntity(&scene, i);
+            if (entity->type == MODEL) {
+                DUAL_Editor_ModelData modelData; unsigned int offset = 0;
+                GET_DATA_BUFFER(&modelData, DUAL_Editor_ModelData, entity->block, offset);
 
+                DUAL_Model* model = DUAL_ResourceManager_GetModel(resourceManager, modelData.name);
+                if (!model) {
+                    DUAL_Log(DUAL_LOG_ERROR, "trying to use a NULL model");
+                    continue;
+                }
+                DUAL_DrawModel(renderer3D, model, model->materials, entity->transform);
+            }
+        }
 
         DUAL_Renderer3D_End(renderer3D);
 

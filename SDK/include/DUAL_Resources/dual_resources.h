@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "../DUAL_Core/dual_core.h"
+#include <glib.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,20 +30,26 @@ extern "C" {
  *  Types opaques
  * ========================================================================== */
 
-/**
- * @brief Gestionnaire de ressources mémoire, responsable du suivi de la VRAM
- *        et de la RAM utilisées par les assets chargés.
- *
- * Une instance unique est généralement créée au démarrage de l'application
- * et partagée par tous les modules consommateurs de ressources.
- */
-typedef struct DUAL_ResourceManager DUAL_ResourceManager;
+typedef struct DUAL_Texture DUAL_Texture;
+typedef struct DUAL_Model DUAL_Model;
+typedef struct DUAL_Animated_Model DUAL_Animated_Model;
+typedef struct DUAL_Sound DUAL_Sound;
+typedef struct DUAL_Font DUAL_Font;
 
-/**
- * @brief Handle opaque représentant une allocation mémoire suivie par le
- *        gestionnaire de ressources (bloc VRAM ou RAM).
- */
-typedef struct DUAL_ResourceHandle DUAL_ResourceHandle;
+typedef struct DUAL_ResourceManager{
+    DUAL_App* app;
+    uint64_t vram_utilisee;
+    uint64_t vram_totale;
+    uint64_t ram_utilisee;
+    uint64_t ram_totale;
+    uint32_t nombre_ressources;
+
+    GHashTable* texture_collection;
+    GHashTable* model_collection;
+    GHashTable* animated_models_collection;
+    GHashTable* sound_collection;
+    GHashTable* font_collection;
+}DUAL_ResourceManager;
 
 /* ============================================================================
  *  Enumérations
@@ -61,12 +68,14 @@ typedef enum DUAL_MemoryType {
  *        reporting et le déchargement sélectif.
  */
 typedef enum DUAL_ResourceCategory {
-    DUAL_RESOURCE_TEXTURE   = 0, /**< Texture 2D ou spritesheet. */
-    DUAL_RESOURCE_MODEL_3D  = 1, /**< Modèle 3D (géométrie, OBJ importé). */
-    DUAL_RESOURCE_SOUND     = 2, /**< Son chargé intégralement en mémoire. */
-    DUAL_RESOURCE_MUSIC     = 3, /**< Flux musical en streaming. */
-    DUAL_RESOURCE_STRUCT    = 4, /**< Structure personnalisee comme par exemple un personnage. */
-    DUAL_RESOURCE_AUTRE     = 5  /**< Ressource générique non catégorisée. */
+    DUAL_RESOURCE_TEXTURE           = 0, /**< Texture 2D ou spritesheet. */
+    DUAL_RESOURCE_MODEL_3D          = 1, /**< Modèle 3D (géométrie, OBJ importé). */
+    DUAL_RESOURCE_SOUND             = 2, /**< Son chargé intégralement en mémoire. */
+    DUAL_RESOURCE_MUSIC             = 3, /**< Flux musical en streaming. */
+    DUAL_RESOURCE_STRUCT            = 4, /**< Structure personnalisee comme par exemple un personnage. */
+    DUAL_RESOURCE_ANIMATED_MODEL    = 5,
+    DUAL_RESOURCE_FONT              = 6,
+    DUAL_RESOURCE_AUTRE             = 7  /**< Ressource générique non catégorisée. */
 } DUAL_ResourceCategory;
 
 /* ============================================================================
@@ -104,41 +113,6 @@ DUAL_Result DUAL_ResourceManager_Create(DUAL_App* app, DUAL_ResourceManager** ou
  * @param manager Gestionnaire à détruire.
  */
 void DUAL_ResourceManager_Destroy(DUAL_ResourceManager* manager);
-
-/* ============================================================================
- *  Suivi des allocations
- * ========================================================================== */
-
-/**
- * @brief Enregistre une nouvelle allocation auprès du gestionnaire de ressources.
- *
- * Cette fonction est utilisée en interne par les modules de chargement
- * (textures, modèles, sons) afin que la consommation mémoire globale reste
- * connue et limitable.
- *
- * @param manager Gestionnaire de ressources.
- * @param type Type de mémoire concerné (VRAM ou RAM).
- * @param categorie Catégorie fonctionnelle de la ressource.
- * @param taille_octets Taille de l'allocation, en octets.
- * @param nom_debug Nom lisible utilisé pour le débogage et le reporting (peut être NULL).
- * @param out_handle Pointeur recevant le handle de suivi créé.
- * @return DUAL_OK en cas de succès, DUAL_ERROR_OUT_OF_MEMORY si le budget mémoire est dépassé.
- */
-DUAL_Result DUAL_ResourceManager_Track(DUAL_ResourceManager* manager,
-                                        DUAL_MemoryType type,
-                                        DUAL_ResourceCategory categorie,
-                                        uint64_t taille_octets,
-                                        const char* nom_debug,
-                                        DUAL_ResourceHandle** out_handle);
-
-/**
- * @brief Désenregistre une allocation précédemment suivie, libérant le budget
- *        mémoire correspondant.
- *
- * @param manager Gestionnaire de ressources.
- * @param handle Handle de la ressource à libérer. Devient invalide après l'appel.
- */
-void DUAL_ResourceManager_Untrack(DUAL_ResourceManager* manager, DUAL_ResourceHandle* handle);
 
 /* ============================================================================
  *  Requêtes et limites
@@ -206,6 +180,21 @@ void DUAL_ResourceManager_PurgeAll(DUAL_ResourceManager* manager);
  */
 void DUAL_ResourceManager_Log(DUAL_ResourceManager* manager);
 
+// Obligatoire pour les fonctions en dessous
+void DUAL_ResourceManager_AddTexture(DUAL_ResourceManager* manager, DUAL_Texture* resource_ptr);
+void DUAL_ResourceManager_AddModel(DUAL_ResourceManager* manager, DUAL_Model* resource_ptr);
+void DUAL_ResourceManager_AddAnimatedModel(DUAL_ResourceManager* manager, DUAL_Animated_Model* resource_ptr);
+void DUAL_ResourceManager_AddSound(DUAL_ResourceManager* manager, DUAL_Sound* resource_ptr);
+void DUAL_ResourceManager_AddFont(DUAL_ResourceManager* manager, DUAL_Font* resource_ptr);
+void DUAL_ResourceManager_AddResource(DUAL_ResourceManager* manager, void* resource_ptr, DUAL_ResourceCategory resource_type);
+void DUAL_GetFilenameWithoutExtension(const char* filepath, char* output_buffer, size_t buffer_size);
+
+void* DUAL_ResourceManager_GetTexture(DUAL_ResourceManager* resource_manager, char* resource_name);
+void* DUAL_ResourceManager_GetModel(DUAL_ResourceManager* resource_manager, char* resource_name);
+void* DUAL_ResourceManager_GetAnimatedModel(DUAL_ResourceManager* resource_manager, char* resource_name);
+void* DUAL_ResourceManager_GetFont(DUAL_ResourceManager* resource_manager, char* resource_name);
+void* DUAL_ResourceManager_GetSound(DUAL_ResourceManager* resource_manager, char* resource_name);
+void* DUAL_ResourceManager_GetResource(DUAL_ResourceManager* resource_manager, char* resource_name, DUAL_ResourceCategory resource_type);
 
 #ifdef __cplusplus
 }

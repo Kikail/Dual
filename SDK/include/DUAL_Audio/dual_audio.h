@@ -2,24 +2,64 @@
 #ifndef DUAL_AUDIO_H
 #define DUAL_AUDIO_H
 
+#define MA_ENABLE_OPUS
+#include "miniaudio.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 #include "../DUAL_Core/dual_core.h"
-#include "../DUAL_Resources/dual_resources.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// FAIRE DES FONCTIONS POUR JOUER DES SONS SELON LA DISTANCE
+#define DUAL_MAX_SOUND_INSTANCES 256
 
-/* ============================================================================
- * Types opaques
- * ========================================================================== */
-
-typedef struct DUAL_AudioManager DUAL_AudioManager;
 typedef struct DUAL_Sound DUAL_Sound;
-typedef struct DUAL_Music DUAL_Music;
+typedef struct DUAL_ResourceManager DUAL_ResourceManager;
+
+typedef struct {
+    ma_sound sound;
+    ma_audio_buffer_ref bufferRef;
+    bool inUse;
+    bool initialized;
+    const DUAL_Sound* source;
+} DUAL_SoundInstance;
+
+typedef struct {
+    DUAL_App* app;
+    ma_engine engine;
+    bool engineInitialized;
+
+    ma_sound_group sfxGroup;
+    ma_sound_group musicGroup;
+    ma_sound_group voiceGroup;
+    bool sfxGroupInitialized;
+    bool musicGroupInitialized;
+    bool voiceGroupInitialized;
+
+    DUAL_SoundInstance instancePool[DUAL_MAX_SOUND_INSTANCES];
+}DUAL_AudioManager;
+
+typedef struct DUAL_Sound{
+    void* pData;
+    size_t dataSize;
+    ma_audio_buffer buffer;
+    ma_uint32 channels;
+    ma_uint32 sampleRate;
+    ma_uint64 frameCount;
+    bool estVoix;
+    DUAL_AudioManager* owningAudio;
+
+    char sound_name[32];
+    char sound_path[128];
+}DUAL_Sound;
+
+typedef struct {
+    ma_sound sound;
+    bool initialized;
+    bool boucle;
+}DUAL_Music;
 
 /* ============================================================================
  * Enumérations
@@ -108,7 +148,7 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
  * @param resources Gestionnaire de ressources.
  * @param sound Son à détruire (peut être NULL).
  */
-void DUAL_Sound_Destroy(DUAL_ResourceManager* resources, DUAL_Sound* sound);
+void DUAL_Sound_Destroy(DUAL_Sound* sound);
 
 /**
  * @brief Joue un son en mode fire-and-forget : une instance libre du pool

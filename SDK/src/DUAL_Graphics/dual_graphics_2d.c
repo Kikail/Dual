@@ -15,54 +15,15 @@
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
-#include "../../include/DUAL_Graphics/camera2d.h"
-#include "../../include/DUAL_Graphics/shader.h"
+#include "DUAL_Resources/dual_resources.h"
+
 extern void DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h);
 
 /* ============================================================================
  * Définition des structures opaques
  * ========================================================================== */
 
-struct DUAL_Texture {
-    GLuint id_opengl;
-    int32_t largeur;
-    int32_t hauteur;
-    DUAL_ResourceHandle* handle;
-};
 
-struct DUAL_Font {
-    DUAL_Texture* texture_atlas;
-    float taille_pixels;
-    stbtt_bakedchar données_caractères[96]; // Stocke les données ASCII 32 à 126
-    DUAL_ResourceHandle* handle;
-};
-
-typedef struct {
-    DUAL_Vec2 position;
-    DUAL_Vec2 tex_coords;
-    DUAL_Color couleur;
-} Vertex2D;
-
-
-struct Internal_Shaders2d_s {
-    DUAL_Shader base_shader;
-};
-struct DUAL_Renderer2D {
-    DUAL_App* app;
-    GLuint vao, vbo;
-
-    DUAL_Shader* current_shader;
-    struct Internal_Shaders2d_s shaders;
-
-    // Caméra
-    DUAL_Camera2D camera;
-
-    // Système de Batching
-    Vertex2D* vertex_buffer;
-    uint32_t vertex_count;
-    uint32_t max_vertices;
-    DUAL_Texture* texture_courante;
-};
 
 
 /* ============================================================================
@@ -82,6 +43,11 @@ DUAL_Result DUAL_Texture_LoadFromFile(DUAL_ResourceManager* resources, const cha
 
     DUAL_Result resultat = DUAL_Texture_LoadFromMemory(resources, pixels, largeur, hauteur, filtre, out_texture);
     stbi_image_free(pixels);
+
+    strcpy((*out_texture)->texture_path, chemin_fichier);
+    DUAL_GetFilenameWithoutExtension((*out_texture)->texture_path, (*out_texture)->texture_name, 32);
+    DUAL_ResourceManager_AddResource(resources, *out_texture, DUAL_RESOURCE_TEXTURE);
+
     return resultat;
 }
 
@@ -89,27 +55,11 @@ DUAL_Result DUAL_Texture_LoadFromMemory(DUAL_ResourceManager* resources, const u
     if (!pixels || !out_texture) return DUAL_ERROR_INVALID_ARG;
 
     uint64_t taille_vram = (uint64_t)largeur * hauteur * 4;
-    DUAL_ResourceHandle* res_handle = NULL;
 
-    if (resources) {
-        DUAL_Result res = DUAL_ResourceManager_Track(resources, DUAL_MEMORY_VRAM, DUAL_RESOURCE_TEXTURE, taille_vram, "Texture_2D", &res_handle);
-        if (res != DUAL_OK) return res;
-    }
-
-    DUAL_Texture* tex = (DUAL_Texture*)malloc(sizeof(struct DUAL_Texture));
-    if (!tex) {
-        if (resources && res_handle) DUAL_ResourceManager_Untrack(resources, res_handle);
-        return DUAL_ERROR_OUT_OF_MEMORY;
-    }
+    DUAL_Texture* tex = (DUAL_Texture*)malloc(sizeof(DUAL_Texture));
 
     tex->largeur = largeur;
     tex->hauteur = hauteur;
-    tex->handle = res_handle;
-
-    if (resources && res_handle) {
-        extern void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void* ptr, void (*cb)(DUAL_ResourceManager*, void*));
-        DUAL_Internal_ResourceHandle_SetCallback(res_handle, tex, (void(*)(DUAL_ResourceManager*, void*))DUAL_Texture_Destroy);
-    }
 
     glGenTextures(1, &tex->id_opengl);
     glBindTexture(GL_TEXTURE_2D, tex->id_opengl);
@@ -126,12 +76,9 @@ DUAL_Result DUAL_Texture_LoadFromMemory(DUAL_ResourceManager* resources, const u
     return DUAL_OK;
 }
 
-void DUAL_Texture_Destroy(DUAL_ResourceManager* resources, DUAL_Texture* texture) {
+void DUAL_Texture_Destroy(DUAL_Texture* texture) {
     if (texture) {
         glDeleteTextures(1, &texture->id_opengl);
-        if (resources && texture->handle) {
-            DUAL_ResourceManager_Untrack(resources, texture->handle);
-        }
         free(texture);
     }
 }
@@ -154,7 +101,7 @@ GLuint DUAL_Internal_GetTextureID(const DUAL_Texture* texture) {
 DUAL_Result DUAL_Renderer2D_Create(DUAL_App* app, DUAL_Renderer2D** out_renderer) {
     if (!app || !out_renderer) return DUAL_ERROR_INVALID_ARG;
 
-    DUAL_Renderer2D* renderer = (DUAL_Renderer2D*)malloc(sizeof(struct DUAL_Renderer2D));
+    DUAL_Renderer2D* renderer = (DUAL_Renderer2D*)malloc(sizeof(DUAL_Renderer2D));
     if (!renderer) return DUAL_ERROR_OUT_OF_MEMORY;
 
     renderer->app = app;
@@ -343,36 +290,17 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
         return DUAL_ERROR_INIT_FAILED;
     }
 
-    uint64_t taille_ram = sizeof(struct DUAL_Font);
-    DUAL_ResourceHandle* font_handle = NULL;
-    if (resources) {
-        DUAL_Result res = DUAL_ResourceManager_Track(resources, DUAL_MEMORY_RAM, DUAL_RESOURCE_AUTRE, taille_ram, chemin_fichier, &font_handle);
-        if (res != DUAL_OK) {
-            free(ttf_buffer);
-            return res;
-        }
-    }
+    uint64_t taille_ram = sizeof(DUAL_Font);
 
-    DUAL_Font* font = (DUAL_Font*)malloc(sizeof(struct DUAL_Font));
-    if (!font) {
-        free(ttf_buffer);
-        if (resources && font_handle) DUAL_ResourceManager_Untrack(resources, font_handle);
-        return DUAL_ERROR_OUT_OF_MEMORY;
-    }
+    DUAL_Font* font = (DUAL_Font*)malloc(sizeof(DUAL_Font));
     font->taille_pixels = (float)taille_pixels;
-    font->handle = font_handle;
     font->texture_atlas = NULL;
 
-    if (resources && font_handle) {
-        extern void DUAL_Internal_ResourceHandle_SetCallback(DUAL_ResourceHandle* handle, void* ptr, void (*cb)(DUAL_ResourceManager*, void*));
-        DUAL_Internal_ResourceHandle_SetCallback(font_handle, font, (void(*)(DUAL_ResourceManager*, void*))DUAL_Font_Destroy);
-    }
 
     int atlas_w = 1024, atlas_h = 1024;
     uint8_t* bitmap_mono = (uint8_t*)calloc((size_t)atlas_w * atlas_h, 1);
     if (!bitmap_mono) {
         free(ttf_buffer);
-        if (resources && font_handle) DUAL_ResourceManager_Untrack(resources, font_handle);
         free(font);
         return DUAL_ERROR_OUT_OF_MEMORY;
     }
@@ -382,7 +310,6 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
     uint8_t* bitmap_rgba = (uint8_t*)malloc((size_t)atlas_w * atlas_h * 4);
     if (!bitmap_rgba) {
         free(bitmap_mono);
-        if (resources && font_handle) DUAL_ResourceManager_Untrack(resources, font_handle);
         free(font);
         return DUAL_ERROR_OUT_OF_MEMORY;
     }
@@ -399,20 +326,21 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
     free(bitmap_rgba);
 
     if (res_tex != DUAL_OK) {
-        if (resources && font_handle) DUAL_ResourceManager_Untrack(resources, font_handle);
         free(font);
         return res_tex;
     }
 
+    strcpy(font->font_path, chemin_fichier);
+    DUAL_GetFilenameWithoutExtension(chemin_fichier, font->font_name, 32);
+    DUAL_ResourceManager_AddResource(resources, font, DUAL_RESOURCE_FONT);
+
     *out_font = font;
+
     return DUAL_OK;
 }
 
-void DUAL_Font_Destroy(DUAL_ResourceManager* resources, DUAL_Font* font) {
+void DUAL_Font_Destroy(DUAL_Font* font) {
     if (font) {
-        if (resources && font->handle) {
-            DUAL_ResourceManager_Untrack(resources, font->handle);
-        }
         free(font);
     }
 }
