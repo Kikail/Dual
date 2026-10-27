@@ -21,15 +21,30 @@ FetchContent_MakeAvailable(box3d)
 # RESOURCES PATH
 # =====================================================
 add_compile_definitions(EXTERNAL_RESOURCES_PATH="${CMAKE_SOURCE_DIR}/Jeux/resources")
-
 add_compile_definitions(INTERNAL_RESOURCES_PATH="${CMAKE_SOURCE_DIR}/SDK/internal_resources")
 add_compile_definitions(INTERNAL_RESOURCES_SHADERS_PATH="${CMAKE_SOURCE_DIR}/SDK/internal_resources/shaders")
+
+# =====================================================
+# DEPENDANCES SYSTEME (PkgConfig & FindPackages)
+# =====================================================
+find_package(PkgConfig REQUIRED)
+
+pkg_check_modules(GLIB REQUIRED glib-2.0)
+if(NOT GLIB_FOUND)
+    message(FATAL_ERROR "GLib 2.0 est requis pour les GList et GHashTable. Installe-le via : sudo apt install libglib2.0-dev")
+endif()
+
+pkg_check_modules(GLFW REQUIRED glfw3)
+pkg_check_modules(OPUS REQUIRED opus opusfile)
+find_package(assimp REQUIRED)
+find_package(OpenGL REQUIRED)
+
+include_directories(${OPUS_INCLUDE_DIRS} ${GLIB_INCLUDE_DIRS})
 
 # ========================================================================
 # 1. CONFIGURATION DU MOTEUR (L'exécutable principal)
 # ========================================================================
 
-# Liste des fichiers sources du moteur uniquement
 set(MOTEUR_SOURCES
         Jeux/Testing/main.c
         SDK/src/DUAL_Core/dual_core.c
@@ -53,7 +68,6 @@ set(MOTEUR_SOURCES
         SDK/include/dual_utils.h
 )
 
-# Sources du SDK partagées entre le moteur et les tests (sans aucun main.c)
 set(SDK_SOURCES
         SDK/src/DUAL_Core/dual_core.c
         SDK/thirdparty/glad/glad.c
@@ -78,25 +92,13 @@ set(SDK_SOURCES
 
 add_executable(Dual ${MOTEUR_SOURCES})
 
-# Flag crucial pour que le moteur exporte ses fonctions vers la clé USB (dlopen)
 target_link_options(Dual PRIVATE "-rdynamic")
-
 target_compile_definitions(Dual PRIVATE ASSETS_DIR="Jeux/Jeu1/assets")
 
-# Association des dossiers includes au moteur
 target_include_directories(Dual PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
-
-# Dépendances système du moteur
-find_package(PkgConfig REQUIRED)
-find_package(assimp REQUIRED)
-pkg_check_modules(GLIB REQUIRED glib-2.0)
-pkg_check_modules(GLFW REQUIRED glfw3)
-find_package(OpenGL REQUIRED)
-pkg_check_modules(OPUS REQUIRED opus opusfile)
-include_directories(${OPUS_INCLUDE_DIRS} ${GLIB_INCLUDE_DIRS})
 
 target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
 
@@ -136,82 +138,22 @@ target_link_libraries(dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} ${GLIB_LI
 # TESTS
 # ========================================================================
 
-# Test core
-add_executable(test_core Jeux/Testing/test_core.c ${SDK_SOURCES})
-target_include_directories(test_core PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(test_core PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
+macro(add_dual_test test_name source_file)
+    add_executable(${test_name} ${source_file} ${SDK_SOURCES})
+    target_include_directories(${test_name} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
+    )
+    target_link_libraries(${test_name} PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
+endmacro()
 
-# Test resources
-add_executable(test_resources Jeux/Testing/test_resources.c ${SDK_SOURCES})
-target_include_directories(test_resources PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(test_resources PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
-
-# Test math
-add_executable(test_math Jeux/Testing/test_math.c ${SDK_SOURCES})
-target_include_directories(test_math PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(test_math PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
-
-# Test graphics 2d
-add_executable(test_graphics_2d Jeux/Testing/test_graphics_2d.c ${SDK_SOURCES})
-target_include_directories(test_graphics_2d PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(test_graphics_2d PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
-
-# Test graphics 3d
-add_executable(test_graphics_3d Jeux/Testing/test_graphics_3d.c ${SDK_SOURCES})
-target_include_directories(test_graphics_3d PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(test_graphics_3d PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
-
-# Test File Saver
-add_executable(test_fs Jeux/Testing/test_fs.c ${SDK_SOURCES})
-target_include_directories(test_fs PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(test_fs PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
-
-# Test Audio
-add_executable(test_audio Jeux/Testing/test_audio.c ${SDK_SOURCES})
-target_include_directories(test_audio PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(test_audio PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
-
-# Test Physics 3D
-add_executable(test_physics_3d Jeux/Testing/test_physics_3d.c ${SDK_SOURCES})
-target_include_directories(test_physics_3d PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(test_physics_3d PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
-
-# Test Scene Loader
-add_executable(testing_scene_loader Jeux/Testing/testing_scene_loader.c ${SDK_SOURCES})
-target_include_directories(testing_scene_loader PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(testing_scene_loader PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
-
-# Test Scene Loader
-add_executable(fps_game_demo Jeux/Testing/fps_game_demo.c ${SDK_SOURCES})
-target_include_directories(fps_game_demo PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(fps_game_demo PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
+add_dual_test(test_core Jeux/Testing/test_core.c)
+add_dual_test(test_resources Jeux/Testing/test_resources.c)
+add_dual_test(test_math Jeux/Testing/test_math.c)
+add_dual_test(test_graphics_2d Jeux/Testing/test_graphics_2d.c)
+add_dual_test(test_graphics_3d Jeux/Testing/test_graphics_3d.c)
+add_dual_test(test_fs Jeux/Testing/test_fs.c)
+add_dual_test(test_audio Jeux/Testing/test_audio.c)
+add_dual_test(test_physics_3d Jeux/Testing/test_physics_3d.c)
+add_dual_test(testing_scene_loader Jeux/Testing/testing_scene_loader.c)
+add_dual_test(fps_game_demo Jeux/Testing/fps_game_demo.c)

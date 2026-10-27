@@ -113,7 +113,7 @@ void DUAL_PhysicsWorld_Step(DUAL_PhysicsWorld* world, float dt) {
                 // Ne pas résoudre si les objets s'éloignent déjà
                 if (vel_along_normal > 0.0f) continue;
 
-                float e = 0.5f; // Coefficient de restitution
+                float e = 0.0f; // Coefficient de restitution
                 float j = -(1.0f + e) * vel_along_normal;
                 j /= total_inv_mass;
 

@@ -18,7 +18,63 @@ void game_charger_scene(char* filepath, DUAL_Editor_Scene* output) {
     afficher_scene(output);
 }
 
-void game_charger_ressources(struct DUAL_ResourceManager* resource_manager, DUAL_Editor_Scene* scene) {
+DUAL_RigidBody create_collision(DUAL_Vec3 position, DUAL_AABB aabb) {
+    DUAL_RigidBody body;
+    body.masse = 1.0f;
+    body.masse_inverse = 1.0f;
+    body.est_statique = true;
+    body.actif = true;
+    body.amortissement = 0.98f;
+    body.position = position;
+    body.vitesse = (DUAL_Vec3){0.0f, 0.0f, 0.0f};
+    body.forces = (DUAL_Vec3){0.0f, 0.0f, 0.0f};
+    body.collider.type = DUAL_COLLIDER_AABB;
+    body.collider.shape.aabb = aabb;
+    return body;
+}
+DUAL_RigidBody create_player_body(DUAL_Vec3 position) {
+    DUAL_RigidBody body;
+    body.masse = 1.0f;
+    body.masse_inverse = 1.0f;
+    body.est_statique = false;
+    body.actif = true;
+    body.amortissement = 0.98f;
+    body.position = position;
+    body.vitesse = (DUAL_Vec3){0.0f, 0.0f, 0.0f};
+    body.forces = (DUAL_Vec3){0.0f, 0.0f, 0.0f};
+    body.collider.type = DUAL_COLLIDER_AABB;
+    body.collider.shape.aabb = (DUAL_AABB){(DUAL_Vec3){-0.3f, 0.0f, -0.3f}, (DUAL_Vec3){0.3f, 1.7f, 0.3f}};
+    return body;
+}
+
+void game_charger_collisions(DUAL_PhysicsWorld* physicsWorld, DUAL_Editor_Scene* scene) {
+    for (int i = 0; i < scene->numEntities; i++) {
+        DUAL_Editor_SceneEntity* entity = getEntity(scene, i);
+        if (entity->type == COLLISION) {
+            DUAL_Editor_CollisionData collision; unsigned int offsetcol = 0;
+            GET_DATA_BUFFER(&collision, DUAL_Editor_CollisionData, entity->block, offsetcol);
+            afficher_CollisionData(collision);
+            DUAL_PhysicsWorld_AddBody(physicsWorld, create_collision(entity->transform.position, collision.CollisionDataInfo.aabb));
+        }
+    }
+}
+
+DUAL_Editor_SceneEntity structs_entities[16]; unsigned int current_structs = 0;
+DUAL_Editor_SceneEntity* game_get_struct_entity(char* targetname, DUAL_Editor_StructData* out_struct_data) {
+    for (int i = 0; i < current_structs; i++) {
+        if (structs_entities[i].type == STRUCT) {
+            DUAL_Editor_StructData structData; unsigned int offsetstruct = 0;
+            GET_DATA_BUFFER(&structData, DUAL_Editor_StructData, structs_entities[i].block, offsetstruct);
+            if (strcmp(structData.targetname, targetname) == 0) {
+                *out_struct_data = structData;
+                return &structs_entities[i];
+            }
+        }
+    }
+    return NULL;
+}
+
+void game_charger_ressources(DUAL_ResourceManager* resource_manager, DUAL_Editor_Scene* scene) {
     for (int i = 0; i < scene->numEntities; i++) {
         DUAL_Editor_SceneEntity* entity = getEntity(scene, i);
         if (entity->type == MODEL) {
@@ -30,12 +86,55 @@ void game_charger_ressources(struct DUAL_ResourceManager* resource_manager, DUAL
 
             DUAL_Model_Load(resource_manager, model.path, &model3D, &nb_mats, &mats);
         }
+        if (entity->type == STRUCT) {
+            if (current_structs < 16) {
+                structs_entities[current_structs] = *entity;
+                current_structs++;
+            } else {
+                DUAL_Log(DUAL_LOG_ERROR, "Trop de structures dans la scene ! Limite atteinte (16 max).");
+            }
+        }
     }
+}
+
+#define GAME_VITESSE_JOUEUR 4.0
+#define GAME_JUMP_HEIGHT 4.2
+#define SHOW_DEBUG_AABB false
+
+void game_deplacer_joueur(DUAL_InputManager* inputManager, DUAL_RigidBody* playerBody, float dt, DUAL_Camera3D* cam) {
+    float vitesse_y_actuelle = playerBody->vitesse.y;
+
+
+    DUAL_Vec3 nouvelle_vitesse = { 0.0f, vitesse_y_actuelle, 0.0f };
+    DUAL_Vec3 front_flat = { cam->front.x, 0.0f, cam->front.z };
+    front_flat = DUAL_Vec3_Normalize(front_flat);
+    DUAL_Vec3 right_flat = { cam->right.x, 0.0f, cam->right.z };
+    right_flat = DUAL_Vec3_Normalize(right_flat);
+
+    if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_KEYBOARD_W)) {
+        nouvelle_vitesse = DUAL_Vec3_Add(nouvelle_vitesse, DUAL_Vec3_Scale(front_flat, GAME_VITESSE_JOUEUR));
+    }
+    if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_KEYBOARD_S)) {
+        nouvelle_vitesse = DUAL_Vec3_Sub(nouvelle_vitesse, DUAL_Vec3_Scale(front_flat, GAME_VITESSE_JOUEUR));
+    }
+    if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_KEYBOARD_A)) {
+        nouvelle_vitesse = DUAL_Vec3_Sub(nouvelle_vitesse, DUAL_Vec3_Scale(right_flat, GAME_VITESSE_JOUEUR));
+    }
+    if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_KEYBOARD_D)) {
+        nouvelle_vitesse = DUAL_Vec3_Add(nouvelle_vitesse, DUAL_Vec3_Scale(right_flat, GAME_VITESSE_JOUEUR));
+    }
+    if (DUAL_IsButtonPressed(inputManager, DUAL_BUTTON_KEYBOARD_SPACE)) {
+        nouvelle_vitesse.y = GAME_JUMP_HEIGHT;
+    }
+
+    cam->position = DUAL_Vec3_Add(playerBody->position, (DUAL_Vec3){0.0, 1.5, 0.0});
+
+    playerBody->vitesse = nouvelle_vitesse;
 }
 
 int main() {
     // On charge notre scene
-    char* filepath = "/home/killian/Documents/myScene.dual";
+    char* filepath = "/home/killian/Scenes/scene1.dual";
     DUAL_Editor_Scene scene;
     game_charger_scene(filepath, &scene);
 
@@ -51,6 +150,7 @@ int main() {
         .screenLayout = DUAL_LAYOUT_NO_SPLIT
     };
     DUAL_Init(&config, &app);
+    glfwSetInputMode(DUAL_GetWindow(app), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     // On creer notre Renderer
     DUAL_Renderer3D* renderer3D = NULL;
@@ -81,13 +181,29 @@ int main() {
     DUAL_ResourceManager* resourceManager = NULL;
     DUAL_ResourceManager_Create(app, &resourceManager);
 
+    // On charge toutes les donnees de la scene
     game_charger_ressources(resourceManager, &scene);
+
+    // On creer la physique du jeu
+    DUAL_PhysicsWorld* physicsWorld = DUAL_PhysicsWorld_Create((DUAL_Vec3){0.0, -9.81, 0.0});
+
+    DUAL_Vec3 spawn_pos = {0.0,0.0,0.0};
+    DUAL_Editor_StructData player_spawn_struct;
+    DUAL_Editor_SceneEntity* player_spawn_entity = game_get_struct_entity("player_spawn",&player_spawn_struct);
+    if (player_spawn_entity != NULL) {
+        spawn_pos = player_spawn_entity->transform.position;
+    }
+    unsigned int player_body_index = DUAL_PhysicsWorld_AddBody(physicsWorld, create_player_body(spawn_pos));
+    game_charger_collisions(physicsWorld, &scene);
 
     // On creer notre handler d'Inputs
     DUAL_InputManager* inputManager = NULL;
     DUAL_InputManager_Create(app, &inputManager);
+    double oldx = 0, oldy = 0;
+    bool firstMouse = false;
 
     DUAL_SetScreenClearColor(app, DUAL_SCREEN_MAIN, DUAL_COLOR_BLUE);
+
 
     while (DUAL_ShouldRun(app)) {
         DUAL_BeginFrame(app);
@@ -95,26 +211,32 @@ int main() {
 
         // On actualise les inputs
         DUAL_InputManager_Update(inputManager);
-        if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_UP)) {
-            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
-            DUAL_Camera3D_ProcessKeyboard(cam, FORWARD, DUAL_GetDeltaTime(app));
+
+        // Bouger la camera
+        double x, y;
+        glfwGetCursorPos(DUAL_GetWindow(app), &x, &y);
+        if (!firstMouse) {
+            oldx = x;
+            oldy = y;
+            firstMouse = true;
         }
-        if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_DOWN)) {
-            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
-            DUAL_Camera3D_ProcessKeyboard(cam, BACKWARD, DUAL_GetDeltaTime(app));
+        double xoffset = x - oldx;
+        double yoffset = y - oldy;
+        oldx = x;
+        oldy = y;
+        DUAL_Camera3D_ProcessMouseMovement(DUAL_Renderer3D_GetCamera(renderer3D), xoffset, yoffset);
+
+        // Pour fermer le jeu
+        if (DUAL_IsButtonPressed(inputManager, DUAL_BUTTON_KEYBOARD_ESCAPE)) {
+            DUAL_RequestExit(app);
         }
-        if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_LEFT)) {
-            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
-            DUAL_Camera3D_ProcessKeyboard(cam, LEFT, DUAL_GetDeltaTime(app));
-        }
-        if (DUAL_IsButtonDown(inputManager, DUAL_BUTTON_RIGHT)) {
-            DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
-            DUAL_Camera3D_ProcessKeyboard(cam, RIGHT, DUAL_GetDeltaTime(app));
-        }
+
+        // On actualise la physique
+        DUAL_PhysicsWorld_Step(physicsWorld, DUAL_GetDeltaTime(app));
 
 
         // On actualise les donnees du monde ici
-
+        game_deplacer_joueur(inputManager, &physicsWorld->bodies[player_body_index], DUAL_GetDeltaTime(app), DUAL_Renderer3D_GetCamera(renderer3D));
 
 
         // On dessine nos images
@@ -127,12 +249,24 @@ int main() {
                 DUAL_Editor_ModelData modelData; unsigned int offset = 0;
                 GET_DATA_BUFFER(&modelData, DUAL_Editor_ModelData, entity->block, offset);
 
-                DUAL_Model* model = DUAL_ResourceManager_GetModel(resourceManager, modelData.name);
+                char model_resource_name[64];
+                DUAL_GetFilenameWithoutExtension(modelData.path, model_resource_name, sizeof(model_resource_name));
+
+                DUAL_Model* model = DUAL_ResourceManager_GetModel(resourceManager, model_resource_name);
                 if (!model) {
                     DUAL_Log(DUAL_LOG_ERROR, "trying to use a NULL model");
                     continue;
                 }
                 DUAL_DrawModel(renderer3D, model, model->materials, entity->transform);
+            }
+        }
+
+        // On dessine le aabb du joueur
+        if (SHOW_DEBUG_AABB) {
+            DUAL_Debug_DrawAABB(renderer3D, DUAL_GetGlobalAABB(&physicsWorld->bodies[player_body_index]), DUAL_VEC3_COLOR_RED);
+            for (int i = 0; i < physicsWorld->count_bodies; i++) {
+                if (!physicsWorld->bodies[i].est_statique) continue;
+                DUAL_Debug_DrawAABB(renderer3D, DUAL_GetGlobalAABB(&physicsWorld->bodies[i]), DUAL_VEC3_COLOR_MAGENTA);
             }
         }
 

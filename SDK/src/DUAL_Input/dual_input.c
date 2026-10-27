@@ -57,7 +57,13 @@ DUAL_Result DUAL_InputManager_Create(DUAL_App* app, DUAL_InputManager** out_inpu
     input->mapping_clavier[DUAL_BUTTON_UP]     = GLFW_KEY_UP;          /* Croix directionnelle */
     input->mapping_clavier[DUAL_BUTTON_DOWN]   = GLFW_KEY_DOWN;
     input->mapping_clavier[DUAL_BUTTON_LEFT]   = GLFW_KEY_LEFT;
-    input->mapping_clavier[DUAL_BUTTON_RIGHT]  = GLFW_KEY_RIGHT;
+    input->mapping_clavier[DUAL_BUTTON_RIGHT]   = GLFW_KEY_RIGHT;
+    input->mapping_clavier[DUAL_BUTTON_KEYBOARD_W]  = GLFW_KEY_W;
+    input->mapping_clavier[DUAL_BUTTON_KEYBOARD_A]  = GLFW_KEY_A;
+    input->mapping_clavier[DUAL_BUTTON_KEYBOARD_S]  = GLFW_KEY_S;
+    input->mapping_clavier[DUAL_BUTTON_KEYBOARD_D]  = GLFW_KEY_D;
+    input->mapping_clavier[DUAL_BUTTON_KEYBOARD_ESCAPE]  = GLFW_KEY_ESCAPE;
+    input->mapping_clavier[DUAL_BUTTON_KEYBOARD_SPACE]  = GLFW_KEY_SPACE;
 
     input->joystick_axes.x = 0.0f;
     input->joystick_axes.y = 0.0f;

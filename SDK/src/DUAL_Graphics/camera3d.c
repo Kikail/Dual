@@ -38,7 +38,7 @@ void DUAL_Camera3D_ProcessMouseMovement(DUAL_Camera3D* cam, float xoffset, float
     yoffset *= cam->mouseSensitivity;
 
     cam->yaw   += xoffset;
-    cam->pitch += yoffset;
+    cam->pitch += -yoffset;
 
     DUAL_Camera3D_UpdateCameraVectors(cam);
 }

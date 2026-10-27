@@ -38,19 +38,25 @@ typedef struct DUAL_InputManager DUAL_InputManager;
  * @brief Identifie chacun des boutons physiques de la console.
  */
 typedef enum DUAL_Button {
-    DUAL_BUTTON_A      = 0,  /**< Bouton d'action principal A. */
-    DUAL_BUTTON_B      = 1,  /**< Bouton d'action secondaire B. */
-    DUAL_BUTTON_X      = 2,  /**< Bouton d'action X. */
-    DUAL_BUTTON_Y      = 3,  /**< Bouton d'action Y. */
-    DUAL_BUTTON_L      = 4,  /**< Gâchette/épaule gauche. */
-    DUAL_BUTTON_R      = 5,  /**< Gâchette/épaule droite. */
-    DUAL_BUTTON_START  = 6,  /**< Bouton de démarrage / menu pause. */
-    DUAL_BUTTON_SELECT = 7,  /**< Bouton de sélection / menu secondaire. */
-    DUAL_BUTTON_UP     = 8,  /**< Direction haut de la croix directionnelle. */
-    DUAL_BUTTON_DOWN   = 9,  /**< Direction bas de la croix directionnelle. */
-    DUAL_BUTTON_LEFT   = 10, /**< Direction gauche de la croix directionnelle. */
-    DUAL_BUTTON_RIGHT  = 11, /**< Direction droite de la croix directionnelle. */
-    DUAL_BUTTON_COUNT  = 12  /**< Nombre total de boutons physiques gérés. */
+    DUAL_BUTTON_A          = 0,  /**< Bouton d'action principal A. */
+    DUAL_BUTTON_B          = 1,  /**< Bouton d'action secondaire B. */
+    DUAL_BUTTON_X          = 2,  /**< Bouton d'action X. */
+    DUAL_BUTTON_Y          = 3,  /**< Bouton d'action Y. */
+    DUAL_BUTTON_L          = 4,  /**< Gâchette/épaule gauche. */
+    DUAL_BUTTON_R          = 5,  /**< Gâchette/épaule droite. */
+    DUAL_BUTTON_START      = 6,  /**< Bouton de démarrage / menu pause. */
+    DUAL_BUTTON_SELECT     = 7,  /**< Bouton de sélection / menu secondaire. */
+    DUAL_BUTTON_UP         = 8,  /**< Direction haut de la croix directionnelle. */
+    DUAL_BUTTON_DOWN       = 9,  /**< Direction bas de la croix directionnelle. */
+    DUAL_BUTTON_LEFT       = 10, /**< Direction gauche de la croix directionnelle. */
+    DUAL_BUTTON_RIGHT      = 11, /**< Direction droite de la croix directionnelle. */
+    DUAL_BUTTON_KEYBOARD_W = 12,
+    DUAL_BUTTON_KEYBOARD_A = 13,
+    DUAL_BUTTON_KEYBOARD_S = 14,
+    DUAL_BUTTON_KEYBOARD_D = 15,
+    DUAL_BUTTON_KEYBOARD_SPACE = 16,
+    DUAL_BUTTON_KEYBOARD_ESCAPE = 17,
+    DUAL_BUTTON_COUNT      = 18,  /**< Nombre total de boutons physiques gérés. */
 } DUAL_Button;
 
 /**

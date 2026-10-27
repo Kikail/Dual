@@ -387,6 +387,7 @@ static DUAL_Result BuildModel(DUAL_ResourceManager* resources, const char* chemi
             continue;
         }
 
+        /*
         char texPathBuffer[512];
         size_t len = 0;
         if (dir_len > 0 && dir_len < sizeof(texPathBuffer)) {
@@ -394,9 +395,10 @@ static DUAL_Result BuildModel(DUAL_ResourceManager* resources, const char* chemi
             len = dir_len;
         }
         snprintf(texPathBuffer + len, sizeof(texPathBuffer) - len, "%s", texPath.data);
+        */
 
         DUAL_Texture* texture = NULL;
-        if (DUAL_Texture_LoadFromFile(resources, texPathBuffer, DUAL_FILTER_NEAREST, &texture) == DUAL_OK) {
+        if (DUAL_Texture_LoadFromFile(resources, texPath.data, DUAL_FILTER_NEAREST, &texture) == DUAL_OK) {
             DUAL_Material_Create(resources, texture, &model->materials[i]);
         }
     }
