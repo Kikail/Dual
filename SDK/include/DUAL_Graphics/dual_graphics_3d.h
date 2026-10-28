@@ -180,6 +180,8 @@ typedef struct Animator{
     Animation* m_CurrentAnimation;
     float m_CurrentTime;
     float m_DeltaTime;
+    bool m_Loop;
+    bool m_Finished;
 }Animator;
 
 typedef struct Internal_Shaders3d_s{

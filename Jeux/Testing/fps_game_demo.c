@@ -15,7 +15,7 @@ void game_charger_scene(char* filepath, DUAL_Editor_Scene* output) {
     DUAL_LoadFile(filepath, new_buffer, filesize);
     unsigned int buffer_offset_scene = 0;
     charger_scene(output, new_buffer, &buffer_offset_scene);
-    afficher_scene(output);
+    //afficher_scene(output);
 }
 
 DUAL_RigidBody create_collision(DUAL_Vec3 position, DUAL_AABB aabb) {
@@ -53,7 +53,7 @@ void game_charger_collisions(DUAL_PhysicsWorld* physicsWorld, DUAL_Editor_Scene*
         if (entity->type == COLLISION) {
             DUAL_Editor_CollisionData collision; unsigned int offsetcol = 0;
             GET_DATA_BUFFER(&collision, DUAL_Editor_CollisionData, entity->block, offsetcol);
-            afficher_CollisionData(collision);
+            //afficher_CollisionData(collision);
             DUAL_PhysicsWorld_AddBody(physicsWorld, create_collision(entity->transform.position, collision.CollisionDataInfo.aabb));
         }
     }
@@ -104,7 +104,6 @@ void game_charger_ressources(DUAL_ResourceManager* resource_manager, DUAL_Editor
 void game_deplacer_joueur(DUAL_InputManager* inputManager, DUAL_RigidBody* playerBody, float dt, DUAL_Camera3D* cam) {
     float vitesse_y_actuelle = playerBody->vitesse.y;
 
-
     DUAL_Vec3 nouvelle_vitesse = { 0.0f, vitesse_y_actuelle, 0.0f };
     DUAL_Vec3 front_flat = { cam->front.x, 0.0f, cam->front.z };
     front_flat = DUAL_Vec3_Normalize(front_flat);
@@ -133,16 +132,14 @@ void game_deplacer_joueur(DUAL_InputManager* inputManager, DUAL_RigidBody* playe
 }
 
 int main() {
-    // On charge notre scene
     char* filepath = "/home/killian/Scenes/scene1.dual";
     DUAL_Editor_Scene scene;
     game_charger_scene(filepath, &scene);
 
-    // On creer notre application
     DUAL_App* app = NULL;
     DUAL_AppConfig config = {
-        .largeur_ecran = 1200,
-        .hauteur_ecran = 1200,
+        .largeur_ecran = 1920,
+        .hauteur_ecran = 1080,
         .plein_ecran = false,
         .fps_cible = 60,
         .titre_fenetre = "DUAL_FPS_Game",
@@ -152,18 +149,16 @@ int main() {
     DUAL_Init(&config, &app);
     glfwSetInputMode(DUAL_GetWindow(app), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    // On creer notre Renderer
     DUAL_Renderer3D* renderer3D = NULL;
     DUAL_Renderer3D_Create(app, &renderer3D);
 
-    // On change la couleur ambiante
     DUAL_Renderer3D_SetAmbientLight(renderer3D, (DUAL_Vec3){0.3,0.3,0.45});
     DUAL_Light light = {
         .type = DUAL_LIGHT_POINT,
         .position = {3.0,0.0,-2.5},
         .couleur = {1.0,0.3,0.3},
         .direction = {0.0,0.0,0.0},
-        .intensite = 0.5,
+        .intensite = 1.0,
         10
     };
     DUAL_Light sun = {
@@ -177,14 +172,15 @@ int main() {
     DUAL_Renderer3D_SetLight(renderer3D, 1, sun);
     DUAL_Renderer3D_SetCullMode(renderer3D, DUAL_CULL_BACK);
 
-    // On creer le resource manager
     DUAL_ResourceManager* resourceManager = NULL;
     DUAL_ResourceManager_Create(app, &resourceManager);
 
-    // On charge toutes les donnees de la scene
     game_charger_ressources(resourceManager, &scene);
 
-    // On creer la physique du jeu
+    DUAL_Animated_Model* animatedModel = NULL;
+    DUAL_AnimatedModel_Create(resourceManager, "/home/killian/Scenes/pistol.fbx", &animatedModel);
+    DUAL_AnimatedModel_PlayAnimation(animatedModel, 1);
+
     DUAL_PhysicsWorld* physicsWorld = DUAL_PhysicsWorld_Create((DUAL_Vec3){0.0, -9.81, 0.0});
 
     DUAL_Vec3 spawn_pos = {0.0,0.0,0.0};
@@ -196,23 +192,19 @@ int main() {
     unsigned int player_body_index = DUAL_PhysicsWorld_AddBody(physicsWorld, create_player_body(spawn_pos));
     game_charger_collisions(physicsWorld, &scene);
 
-    // On creer notre handler d'Inputs
     DUAL_InputManager* inputManager = NULL;
     DUAL_InputManager_Create(app, &inputManager);
     double oldx = 0, oldy = 0;
     bool firstMouse = false;
 
-    DUAL_SetScreenClearColor(app, DUAL_SCREEN_MAIN, DUAL_COLOR_BLUE);
 
+    DUAL_SetScreenClearColor(app, DUAL_SCREEN_MAIN, DUAL_COLOR_BLACK);
 
     while (DUAL_ShouldRun(app)) {
         DUAL_BeginFrame(app);
 
-
-        // On actualise les inputs
         DUAL_InputManager_Update(inputManager);
 
-        // Bouger la camera
         double x, y;
         glfwGetCursorPos(DUAL_GetWindow(app), &x, &y);
         if (!firstMouse) {
@@ -224,25 +216,19 @@ int main() {
         double yoffset = y - oldy;
         oldx = x;
         oldy = y;
-        DUAL_Camera3D_ProcessMouseMovement(DUAL_Renderer3D_GetCamera(renderer3D), xoffset, yoffset);
+        DUAL_Camera3D* cam = DUAL_Renderer3D_GetCamera(renderer3D);
+        DUAL_Camera3D_ProcessMouseMovement(cam, xoffset, yoffset);
 
-        // Pour fermer le jeu
         if (DUAL_IsButtonPressed(inputManager, DUAL_BUTTON_KEYBOARD_ESCAPE)) {
             DUAL_RequestExit(app);
         }
 
-        // On actualise la physique
         DUAL_PhysicsWorld_Step(physicsWorld, DUAL_GetDeltaTime(app));
 
-
-        // On actualise les donnees du monde ici
         game_deplacer_joueur(inputManager, &physicsWorld->bodies[player_body_index], DUAL_GetDeltaTime(app), DUAL_Renderer3D_GetCamera(renderer3D));
 
-
-        // On dessine nos images
         DUAL_Renderer3D_Begin(renderer3D);
 
-        // Code pour dessiner dans notre renderer
         for (int i = 0; i < scene.numEntities; i++) {
             DUAL_Editor_SceneEntity* entity = getEntity(&scene, i);
             if (entity->type == MODEL) {
@@ -261,7 +247,6 @@ int main() {
             }
         }
 
-        // On dessine le aabb du joueur
         if (SHOW_DEBUG_AABB) {
             DUAL_Debug_DrawAABB(renderer3D, DUAL_GetGlobalAABB(&physicsWorld->bodies[player_body_index]), DUAL_VEC3_COLOR_RED);
             for (int i = 0; i < physicsWorld->count_bodies; i++) {
@@ -270,8 +255,39 @@ int main() {
             }
         }
 
-        DUAL_Renderer3D_End(renderer3D);
 
+
+
+        DUAL_Vec3 wpn_pos = cam->position;
+        wpn_pos = DUAL_Vec3_Add(wpn_pos, DUAL_Vec3_Scale(cam->right, 0.3f));
+        wpn_pos = DUAL_Vec3_Add(wpn_pos, DUAL_Vec3_Scale(cam->up,   -0.2f));
+        wpn_pos = DUAL_Vec3_Add(wpn_pos, DUAL_Vec3_Scale(cam->front,  0.5f));
+
+        DUAL_Transform3D wpn_transform;
+        wpn_transform.position = wpn_pos;
+        wpn_transform.rotation_euler_radians = (DUAL_Vec3){
+            atan2f(cam->up.z, cam->right.z),
+            -asinf(DUAL_Clamp(cam->front.z, -1.0f, 1.0f)),
+            atan2f(cam->front.y, cam->front.x)
+        };
+        wpn_transform.echelle = (DUAL_Vec3){ 0.01f, 0.01f, 0.01f };
+
+        DUAL_Renderer3D_UseShader(renderer3D, SHADER3D_SKELETAL_LIT);
+
+        if (DUAL_IsButtonPressed(inputManager, DUAL_BUTTON_MOUSE_LEFT )) {
+            DUAL_AnimatedModel_PlayAnimation(animatedModel, 0);
+            animatedModel->animator.m_Loop = false;
+        }
+        DUAL_AnimatedModel_Update(animatedModel, DUAL_GetDeltaTime(app));
+        if (animatedModel->animator.m_Finished) {
+            DUAL_AnimatedModel_PlayAnimation(animatedModel, 1);
+            animatedModel->animator.m_Loop = true;
+        }
+
+        DUAL_DrawAnimatedModel(renderer3D, animatedModel->model, animatedModel->model->materials, wpn_transform, &animatedModel->animator);
+
+
+        DUAL_Renderer3D_End(renderer3D);
 
         DUAL_EndFrame(app);
     }

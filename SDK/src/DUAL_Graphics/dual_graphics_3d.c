@@ -278,16 +278,6 @@ DUAL_Result DUAL_Animation_Load(const char* path, DUAL_Model* model, Animation**
     return DUAL_OK;
 }
 
-void Animator_Init(Animator* animator, Animation* animation) {
-    animator->m_CurrentAnimation = animation;
-    animator->m_CurrentTime = 0.0f;
-    animator->m_DeltaTime = 0.0f;
-    const DUAL_Mat4 identity = DUAL_Mat4_Identity();
-    for (int i = 0; i < MAX_BONES; i++) {
-        animator->m_FinalBoneMatrices[i] = identity;
-    }
-}
-
 static void Animator_CalculateBoneTransform(Animator* animator, const DUAL_Model* model, const AssimpNodeData* node, DUAL_Mat4 parentTransform) {
     DUAL_Mat4 nodeTransform = node->transformation;
     Bone* bone = Animation_FindBone(animator->m_CurrentAnimation, node->name);
@@ -311,13 +301,36 @@ static void Animator_CalculateBoneTransform(Animator* animator, const DUAL_Model
     }
 }
 
+void Animator_Init(Animator* animator, Animation* animation) {
+    animator->m_CurrentAnimation = animation;
+    animator->m_CurrentTime = 0.0f;
+    animator->m_DeltaTime = 0.0f;
+    animator->m_Loop = true;
+    animator->m_Finished = false;
+    const DUAL_Mat4 identity = DUAL_Mat4_Identity();
+    for (int i = 0; i < MAX_BONES; i++) {
+        animator->m_FinalBoneMatrices[i] = identity;
+    }
+}
+
 void Animator_UpdateAnimation(Animator* animator, float dt) {
     animator->m_DeltaTime = dt;
     Animation* animation = animator->m_CurrentAnimation;
-    if (animation) {
-        animator->m_CurrentTime = fmodf(animator->m_CurrentTime + animation->m_TicksPerSecond * dt, animation->m_Duration);
-        Animator_CalculateBoneTransform(animator, animation->m_LinkedModel, &animation->m_RootNode, DUAL_Mat4_Identity());
+    if (!animation || animator->m_Finished) return;
+
+    float time = animator->m_CurrentTime + animation->m_TicksPerSecond * dt;
+
+    if (time >= animation->m_Duration) {
+        if (animator->m_Loop) {
+            time = fmodf(time, animation->m_Duration);
+        } else {
+            time = animation->m_Duration;
+            animator->m_Finished = true;
+        }
     }
+
+    animator->m_CurrentTime = time;
+    Animator_CalculateBoneTransform(animator, animation->m_LinkedModel, &animation->m_RootNode, DUAL_Mat4_Identity());
 }
 
 static void ApplyCullMode3D(DUAL_CullMode mode) {

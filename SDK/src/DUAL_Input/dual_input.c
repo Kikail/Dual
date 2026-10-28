@@ -64,6 +64,8 @@ DUAL_Result DUAL_InputManager_Create(DUAL_App* app, DUAL_InputManager** out_inpu
     input->mapping_clavier[DUAL_BUTTON_KEYBOARD_D]  = GLFW_KEY_D;
     input->mapping_clavier[DUAL_BUTTON_KEYBOARD_ESCAPE]  = GLFW_KEY_ESCAPE;
     input->mapping_clavier[DUAL_BUTTON_KEYBOARD_SPACE]  = GLFW_KEY_SPACE;
+    input->mapping_clavier[DUAL_BUTTON_MOUSE_LEFT]  = GLFW_MOUSE_BUTTON_LEFT;
+    input->mapping_clavier[DUAL_BUTTON_MOUSE_RIGHT]  = GLFW_MOUSE_BUTTON_RIGHT;
 
     input->joystick_axes.x = 0.0f;
     input->joystick_axes.y = 0.0f;
@@ -167,7 +169,12 @@ void DUAL_InputManager_Update(DUAL_InputManager* input) {
     for (int i = 0; i < DUAL_BUTTON_COUNT; i++) {
         input->previous_buttons[i] = input->current_buttons[i];
         int code_touche = input->mapping_clavier[i];
-        input->current_buttons[i] = (glfwGetKey(input->window, code_touche) == GLFW_PRESS);
+
+        if (i == DUAL_BUTTON_MOUSE_LEFT || i == DUAL_BUTTON_MOUSE_RIGHT) {
+            input->current_buttons[i] = (glfwGetMouseButton(input->window, code_touche) == GLFW_PRESS);
+        } else {
+            input->current_buttons[i] = (glfwGetKey(input->window, code_touche) == GLFW_PRESS);
+        }
     }
 
     float stick_x = 0.0f;

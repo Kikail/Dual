@@ -56,7 +56,9 @@ typedef enum DUAL_Button {
     DUAL_BUTTON_KEYBOARD_D = 15,
     DUAL_BUTTON_KEYBOARD_SPACE = 16,
     DUAL_BUTTON_KEYBOARD_ESCAPE = 17,
-    DUAL_BUTTON_COUNT      = 18,  /**< Nombre total de boutons physiques gérés. */
+    DUAL_BUTTON_MOUSE_LEFT = 18,
+    DUAL_BUTTON_MOUSE_RIGHT = 19,
+    DUAL_BUTTON_COUNT      = 20,  /**< Nombre total de boutons physiques gérés. */
 } DUAL_Button;
 
 /**
