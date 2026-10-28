@@ -153,29 +153,49 @@ int main() {
     DUAL_Renderer3D_Create(app, &renderer3D);
 
     DUAL_Renderer3D_SetAmbientLight(renderer3D, (DUAL_Vec3){0.3,0.3,0.45});
-    DUAL_Light light = {
+    DUAL_Light light1 = {
         .type = DUAL_LIGHT_POINT,
-        .position = {3.0,0.0,-2.5},
-        .couleur = {1.0,0.3,0.3},
-        .direction = {0.0,0.0,0.0},
-        .intensite = 1.0,
-        10
+        .position = {1.884492, 0.499999, 2.359459},
+        .couleur = DUAL_VEC3_COLOR_GREEN,
+        .direction = {0.0, 0.0, 0.0},
+        .intensite = 0.95,
+        5
+    };
+    DUAL_Light light2 = {
+        .type = DUAL_LIGHT_POINT,
+        .position = {-1.893031, 0.499914, -4.090921},
+        .couleur = DUAL_VEC3_COLOR_RED,
+        .direction = {0.0, 0.0, 0.0},
+        .intensite = 0.95,
+        5
+    };
+    DUAL_Light light3 = {
+        .type = DUAL_LIGHT_POINT,
+        .position = {-4.124408, 0.500000, 2.310266},
+        .couleur = DUAL_VEC3_COLOR_BLUE,
+        .direction = {0.0, 0.0, 0.0},
+        .intensite = 0.95,
+        5
     };
     DUAL_Light sun = {
         .type = DUAL_LIGHT_DIRECTIONAL,
         .position = {3.0,0.0,-2.5},
         .couleur = {0.9,0.9,0.9},
         .direction = {0.0,-1.0,-0.3},
-        .intensite = 0.6
+        .intensite = 0.9
     };
-    DUAL_Renderer3D_SetLight(renderer3D, 0, light);
-    DUAL_Renderer3D_SetLight(renderer3D, 1, sun);
+    DUAL_Renderer3D_SetLight(renderer3D, 0, light1);
+    DUAL_Renderer3D_SetLight(renderer3D, 1, light2);
+    DUAL_Renderer3D_SetLight(renderer3D, 2, light3);
+    DUAL_Renderer3D_SetLight(renderer3D, 3, sun);
     DUAL_Renderer3D_SetCullMode(renderer3D, DUAL_CULL_BACK);
 
     DUAL_ResourceManager* resourceManager = NULL;
     DUAL_ResourceManager_Create(app, &resourceManager);
 
     game_charger_ressources(resourceManager, &scene);
+    DUAL_Texture* texture = NULL;
+    DUAL_Texture_LoadFromFile(resourceManager, "/home/killian/CLionProjects/Dual/SDK/internal_resources/textures/gradient-radial.png", DUAL_FILTER_NEAREST, &texture);
 
     DUAL_Animated_Model* animatedModel = NULL;
     DUAL_AnimatedModel_Create(resourceManager, "/home/killian/Scenes/pistol.fbx", &animatedModel);
@@ -255,9 +275,6 @@ int main() {
             }
         }
 
-
-
-
         DUAL_Vec3 wpn_pos = cam->position;
         wpn_pos = DUAL_Vec3_Add(wpn_pos, DUAL_Vec3_Scale(cam->right, 0.3f));
         wpn_pos = DUAL_Vec3_Add(wpn_pos, DUAL_Vec3_Scale(cam->up,   -0.2f));
@@ -286,6 +303,13 @@ int main() {
 
         DUAL_DrawAnimatedModel(renderer3D, animatedModel->model, animatedModel->model->materials, wpn_transform, &animatedModel->animator);
 
+        for (int i = 0; i < 3; i++) {
+            DUAL_Transform3D transform;
+            transform.echelle = (DUAL_Vec3){0.2, 0.2, 0.2};
+            transform.position = renderer3D->lights[i].position;
+            DUAL_Color color = {renderer3D->lights[i].couleur.x, renderer3D->lights[i].couleur.y, renderer3D->lights[i].couleur.z, 1.0};
+            DUAL_DrawBillboard(renderer3D, texture, transform, color);
+        }
 
         DUAL_Renderer3D_End(renderer3D);
 
