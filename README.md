@@ -3,7 +3,7 @@
 Framework de rendu 2D/3D fait en C avec OpenGL.
 > **Projet en développement** : fuites mémoire à corriger, code à réorganiser, documentation incomplète.
 
-Le code en lui-même présente peu d’intérêt. Examinez les modules principaux ainsi que les exemples (classés du plus simple au plus avancé) :
+Examinez les modules principaux ainsi que les exemples (classés du plus simple au plus avancé) :
 1. [Tampon de Texte (Text Buffer)](#1-tampon-de-texte-text-buffer)
 2. [Jeu Flappy Bird](#2-jeu-flappy-bird)
 3. [Système de Particules](#3-système-de-particules)
