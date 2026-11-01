@@ -261,7 +261,7 @@ DUAL_Camera3D* DUAL_Renderer3D_GetCamera(DUAL_Renderer3D* renderer);
  * ========================================================================== */
 
 DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_Model** out_model, unsigned int* out_material_count, DUAL_Material*** out_materials);
-void DUAL_Model_Destroy(DUAL_Model* model);
+void DUAL_Model_Destroy(void* model);
 DUAL_AABB DUAL_Model_GetBoundingBox(const DUAL_Model* model);
 uint32_t DUAL_Model_GetMeshCount(const DUAL_Model* model);
 
@@ -333,7 +333,7 @@ void DUAL_Debug_Draw_Model_BoundingBox(DUAL_Renderer3D* debug, DUAL_AABB box, DU
 DUAL_Result DUAL_AnimatedModel_Create(DUAL_ResourceManager* resources, const char* glb_path, DUAL_Animated_Model** out_animated_model);
 void DUAL_AnimatedModel_PlayAnimation(DUAL_Animated_Model* anim_model, unsigned int index);
 void DUAL_AnimatedModel_Update(DUAL_Animated_Model* anim_model, float dt);
-void DUAL_AnimatedModel_Destroy(DUAL_Animated_Model* anim_model);
+void DUAL_AnimatedModel_Destroy(void* anim_model);
 
 void DUAL_Debug_Transform(DUAL_Transform3D transform);
 void DUAL_Debug_Vec3(DUAL_Vec3 vector);

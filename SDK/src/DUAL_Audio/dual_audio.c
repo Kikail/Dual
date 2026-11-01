@@ -284,7 +284,8 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
     return DUAL_OK;
 }
 
-void DUAL_Sound_Destroy(DUAL_Sound* sound) {
+void DUAL_Sound_Destroy(void* s) {
+    DUAL_Sound* sound = (DUAL_Sound*)s;
     if (!sound) return;
 
     if (sound->owningAudio) {

@@ -10,12 +10,11 @@ include(FetchContent)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "Disable FetchContent updates")
 
 FetchContent_Declare(
-        box3d
-        GIT_REPOSITORY https://github.com/erincatto/box3d.git
+        data_structures
+        GIT_REPOSITORY https://github.com/Kikail/data-structures.git
         GIT_TAG        main
-        GIT_SHALLOW    TRUE
 )
-FetchContent_MakeAvailable(box3d)
+FetchContent_MakeAvailable(data_structures)
 
 # =====================================================
 # RESOURCES PATH
@@ -29,17 +28,12 @@ add_compile_definitions(INTERNAL_RESOURCES_SHADERS_PATH="${CMAKE_SOURCE_DIR}/SDK
 # =====================================================
 find_package(PkgConfig REQUIRED)
 
-pkg_check_modules(GLIB REQUIRED glib-2.0)
-if(NOT GLIB_FOUND)
-    message(FATAL_ERROR "GLib 2.0 est requis pour les GList et GHashTable. Installe-le via : sudo apt install libglib2.0-dev")
-endif()
-
 pkg_check_modules(GLFW REQUIRED glfw3)
 pkg_check_modules(OPUS REQUIRED opus opusfile)
 find_package(assimp REQUIRED)
 find_package(OpenGL REQUIRED)
 
-include_directories(${OPUS_INCLUDE_DIRS} ${GLIB_INCLUDE_DIRS})
+include_directories(${OPUS_INCLUDE_DIRS})
 
 # ========================================================================
 # 1. CONFIGURATION DU MOTEUR (L'exécutable principal)
@@ -100,7 +94,7 @@ target_include_directories(Dual PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
 
-target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
+target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl data_structures)
 
 
 # ========================================================================
@@ -111,7 +105,7 @@ add_library(game SHARED Jeux/Jeu2/game.c)
 target_include_directories(game PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
 )
-target_link_libraries(game PRIVATE ${GLIB_LIBRARIES})
+target_link_libraries(game PRIVATE data_structures)
 set_target_properties(game PROPERTIES PREFIX "")
 set(CLE_USB "/home/killian/Desktop/Games/DUAL_FPS_Game")
 add_custom_command(TARGET game POST_BUILD
@@ -131,7 +125,7 @@ target_include_directories(dual PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
-target_link_libraries(dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl)
+target_link_libraries(dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl data_structures)
 
 
 # ========================================================================
@@ -144,7 +138,7 @@ macro(add_dual_test test_name source_file)
             ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
             ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
     )
-    target_link_libraries(${test_name} PRIVATE ${GLFW_LIBRARIES} ${GLIB_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl box3d)
+    target_link_libraries(${test_name} PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl data_structures)
 endmacro()
 
 add_dual_test(test_core Jeux/Testing/test_core.c)

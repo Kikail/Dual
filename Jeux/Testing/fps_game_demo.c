@@ -15,7 +15,7 @@ void game_charger_scene(char* filepath, DUAL_Editor_Scene* output) {
     DUAL_LoadFile(filepath, new_buffer, filesize);
     unsigned int buffer_offset_scene = 0;
     charger_scene(output, new_buffer, &buffer_offset_scene);
-    //afficher_scene(output);
+    afficher_scene(output);
 }
 
 DUAL_RigidBody create_collision(DUAL_Vec3 position, DUAL_AABB aabb) {
@@ -53,7 +53,7 @@ void game_charger_collisions(DUAL_PhysicsWorld* physicsWorld, DUAL_Editor_Scene*
         if (entity->type == COLLISION) {
             DUAL_Editor_CollisionData collision; unsigned int offsetcol = 0;
             GET_DATA_BUFFER(&collision, DUAL_Editor_CollisionData, entity->block, offsetcol);
-            //afficher_CollisionData(collision);
+            afficher_CollisionData(collision);
             DUAL_PhysicsWorld_AddBody(physicsWorld, create_collision(entity->transform.position, collision.CollisionDataInfo.aabb));
         }
     }
@@ -99,7 +99,7 @@ void game_charger_ressources(DUAL_ResourceManager* resource_manager, DUAL_Editor
 
 #define GAME_VITESSE_JOUEUR 4.0
 #define GAME_JUMP_HEIGHT 4.2
-#define SHOW_DEBUG_AABB false
+#define SHOW_DEBUG_AABB true
 
 void game_deplacer_joueur(DUAL_InputManager* inputManager, DUAL_RigidBody* playerBody, float dt, DUAL_Camera3D* cam) {
     float vitesse_y_actuelle = playerBody->vitesse.y;
@@ -190,12 +190,18 @@ int main() {
     DUAL_Renderer3D_SetLight(renderer3D, 3, sun);
     DUAL_Renderer3D_SetCullMode(renderer3D, DUAL_CULL_BACK);
 
+
+
     DUAL_ResourceManager* resourceManager = NULL;
     DUAL_ResourceManager_Create(app, &resourceManager);
+
+
 
     game_charger_ressources(resourceManager, &scene);
     DUAL_Texture* texture = NULL;
     DUAL_Texture_LoadFromFile(resourceManager, "/home/killian/CLionProjects/Dual/SDK/internal_resources/textures/gradient-radial.png", DUAL_FILTER_NEAREST, &texture);
+
+
 
     DUAL_Animated_Model* animatedModel = NULL;
     DUAL_AnimatedModel_Create(resourceManager, "/home/killian/Scenes/pistol.fbx", &animatedModel);
@@ -219,6 +225,8 @@ int main() {
 
 
     DUAL_SetScreenClearColor(app, DUAL_SCREEN_MAIN, DUAL_COLOR_BLACK);
+
+
 
     while (DUAL_ShouldRun(app)) {
         DUAL_BeginFrame(app);
@@ -315,6 +323,7 @@ int main() {
 
         DUAL_EndFrame(app);
     }
+
 
     return EXIT_SUCCESS;
 }

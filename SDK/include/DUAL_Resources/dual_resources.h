@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "../DUAL_Core/dual_core.h"
-#include <glib.h>
+#include "hashtable/hashtable.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,11 +44,11 @@ typedef struct DUAL_ResourceManager{
     uint64_t ram_totale;
     uint32_t nombre_ressources;
 
-    GHashTable* texture_collection;
-    GHashTable* model_collection;
-    GHashTable* animated_models_collection;
-    GHashTable* sound_collection;
-    GHashTable* font_collection;
+    Hashtable* texture_collection;
+    Hashtable* model_collection;
+    Hashtable* animated_models_collection;
+    Hashtable* sound_collection;
+    Hashtable* font_collection;
 }DUAL_ResourceManager;
 
 /* ============================================================================

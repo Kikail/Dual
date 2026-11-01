@@ -76,9 +76,10 @@ DUAL_Result DUAL_Texture_LoadFromMemory(DUAL_ResourceManager* resources, const u
     return DUAL_OK;
 }
 
-void DUAL_Texture_Destroy(DUAL_Texture* texture) {
+void DUAL_Texture_Destroy(void* texture) {
+    DUAL_Texture* t = (DUAL_Texture*)texture;
     if (texture) {
-        glDeleteTextures(1, &texture->id_opengl);
+        glDeleteTextures(1, &t->id_opengl);
         free(texture);
     }
 }
@@ -339,7 +340,8 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources, const char* 
     return DUAL_OK;
 }
 
-void DUAL_Font_Destroy(DUAL_Font* font) {
+void DUAL_Font_Destroy(void* f) {
+    DUAL_Font* font = (DUAL_Font*)f;
     if (font) {
         free(font);
     }

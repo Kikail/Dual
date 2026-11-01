@@ -8,11 +8,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <glib.h>
 
 #include "../DUAL_Physics/dual_physics.h"
 #include "../DUAL_Math/dual_math.h"
 #include "../DUAL_Graphics/dual_graphics_3d.h"
+#include "dynamic-array/dynamic-array.h"
 
 // Ajouter du contenu dans cette enum pour ajouter des nouveaux composants pour les entity
 // Une entity peut etre que de un seul type pour faciliter la manipulation
@@ -63,7 +63,7 @@ typedef struct DUAL_Editor_SceneEntity {
 
 // Structure tres simple ou nous stockons uniquement des Entity
 typedef struct DUAL_Editor_Scene {
-    GList* entities;
+    DynamicArray* entities;
     unsigned int numEntities;
 }DUAL_Editor_Scene;
 

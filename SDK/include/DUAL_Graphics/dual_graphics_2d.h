@@ -168,7 +168,7 @@ DUAL_Result DUAL_Texture_LoadFromMemory(DUAL_ResourceManager* resources,
  * @param resources Gestionnaire de ressources ayant suivi l'allocation.
  * @param texture Texture à libérer.
  */
-void DUAL_Texture_Destroy(DUAL_Texture* texture);
+void DUAL_Texture_Destroy(void* texture);
 
 /**
  * @brief Retourne les dimensions natives d'une texture chargée.
@@ -279,7 +279,7 @@ DUAL_Result DUAL_Font_LoadFromFile(DUAL_ResourceManager* resources,
  * @param resources Gestionnaire de ressources ayant suivi l'allocation.
  * @param font Police à libérer.
  */
-void DUAL_Font_Destroy(DUAL_Font* font);
+void DUAL_Font_Destroy(void* font);
 
 /**
  * @brief Dessine une chaîne de texte à une position donnée, avec une police

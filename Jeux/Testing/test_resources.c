@@ -52,8 +52,6 @@ int main() {
 
     // On creer une structure et on regarde ce que ca a changer dans la memoire
     Personnage* personnage = ALLOC(Personnage);
-    DUAL_ResourceHandle* handle = NULL;
-    DUAL_ResourceManager_Track(resourceManager, DUAL_MEMORY_RAM, DUAL_RESOURCE_STRUCT, sizeof(Personnage), "personnage", &handle);
     DUAL_ResourceManager_Log(resourceManager);
 
     // On ferme proprement l'application

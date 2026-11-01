@@ -86,8 +86,8 @@ void afficher_entite(DUAL_Editor_SceneEntity* entity) {
 void afficher_scene(DUAL_Editor_Scene* scene) {
     if (scene == NULL) return;
     printf("Scene(%u entities):\n",scene->numEntities);
-    for (GList* l = scene->entities; l != NULL; l = l->next) {
-        DUAL_Editor_SceneEntity* entity = (DUAL_Editor_SceneEntity*)l->data;
+    for (int i = 0; i < scene->entities->size; i++) {
+        DUAL_Editor_SceneEntity* entity = DynamicArray_Get(scene->entities, i);
         if (entity == NULL) continue;
         afficher_entite(entity);
     }
@@ -140,12 +140,12 @@ DUAL_Editor_SceneEntity* createEntity(DUAL_Editor_EntityType type, DUAL_Transfor
 }
 
 DUAL_Editor_SceneEntity* getEntity(DUAL_Editor_Scene* scene, unsigned int index) {
-    return g_list_nth_data(scene->entities, index);
+    return DynamicArray_Get(scene->entities, index);
 }
 
 
 void addEntity(DUAL_Editor_Scene* scene,DUAL_Editor_SceneEntity* entity) {
-    scene->entities = g_list_append(scene->entities, entity);
+    DynamicArray_Put(scene->entities, entity);
     scene->numEntities += 1;
 }
 
@@ -171,8 +171,8 @@ void sauvegarder_scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buf
     print_buffer_hex(buffer, *buffer_offset);
     memcpy(buffer, &scene->numEntities, sizeof(unsigned int)); *buffer_offset += 4;
     print_buffer_hex(buffer, *buffer_offset);
-    for (GList* l = scene->entities; l != NULL; l = l->next) {
-        DUAL_Editor_SceneEntity* entity = (DUAL_Editor_SceneEntity*)l->data;
+    for (int i = 0; i < scene->entities->size; i++) {
+        DUAL_Editor_SceneEntity* entity = DynamicArray_Get(scene->entities, i);
         sauvegarder_entite(entity, buffer, buffer_offset);
         print_buffer_hex(buffer, *buffer_offset);
     }
@@ -198,10 +198,10 @@ void charger_scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buffer_
     if (scene == NULL || buffer == NULL || buffer_offset == NULL) return;
 
     memcpy(&scene->numEntities, buffer + *buffer_offset, sizeof(unsigned int)); *buffer_offset += sizeof(unsigned int);
-    scene->entities = NULL;
+    scene->entities = DynamicArray_CreateEmptyWithCapacity(64);
 
     for (unsigned int i = 0; i < scene->numEntities; i++) {
-        scene->entities = g_list_append(scene->entities, charger_entite(buffer, buffer_offset));
+        DynamicArray_Put(scene->entities, charger_entite(buffer, buffer_offset));
     }
 }
 
@@ -223,8 +223,8 @@ size_t entity_getTotalSize(DUAL_Editor_SceneEntity* entity) {
 
 size_t scene_getTotalSize(DUAL_Editor_Scene* scene) {
     size_t total = sizeof(unsigned int);
-    for (GList* l = scene->entities; l != NULL; l = l->next) {
-        DUAL_Editor_SceneEntity* entity = (DUAL_Editor_SceneEntity*)l->data;
+    for (int i = 0; i < scene->entities->size; i++) {
+        DUAL_Editor_SceneEntity* entity = DynamicArray_Get(scene->entities, i);
         total += entity_getTotalSize(entity);
     }
     return total;
@@ -232,16 +232,19 @@ size_t scene_getTotalSize(DUAL_Editor_Scene* scene) {
 void removeEntity(DUAL_Editor_Scene* scene, DUAL_Editor_SceneEntity* entity) {
     if (scene == NULL || entity == NULL) return;
 
-    GList* node = g_list_find(scene->entities, entity);
-    if (node != NULL) {
-        scene->entities = g_list_remove(scene->entities, entity);
-        if (scene->numEntities > 0) {
-            scene->numEntities--;
+    unsigned int i = 0;
+    while (i < scene->entities->size) {
+        if (entity == DynamicArray_Get(scene->entities, i)) {
+            DynamicArray_RemoveAt(scene->entities, i);
         }
-        if (entity->block != NULL) {
-            free(entity->block);
-        }
-        free(entity);
     }
+
+    if (scene->numEntities > 0) {
+        scene->numEntities--;
+    }
+    if (entity->block != NULL) {
+        free(entity->block);
+    }
+    free(entity);
 }
 

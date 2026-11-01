@@ -148,7 +148,7 @@ DUAL_Result DUAL_Sound_LoadFromFile(DUAL_AudioManager* audio, DUAL_ResourceManag
  * @param resources Gestionnaire de ressources.
  * @param sound Son à détruire (peut être NULL).
  */
-void DUAL_Sound_Destroy(DUAL_Sound* sound);
+void DUAL_Sound_Destroy(void* sound);
 
 /**
  * @brief Joue un son en mode fire-and-forget : une instance libre du pool

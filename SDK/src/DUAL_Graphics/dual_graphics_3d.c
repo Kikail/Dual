@@ -7,7 +7,6 @@
 #include <stdint.h>
 
 #include <glad/glad.h>
-#include <glib.h>
 
 #include "../../include/DUAL_Graphics/dual_graphics_3d.h"
 #include "../../include/DUAL_Graphics/dual_graphics_2d.h"
@@ -532,7 +531,8 @@ DUAL_Result DUAL_Model_Load(DUAL_ResourceManager* resources, const char* chemin_
     return result;
 }
 
-void DUAL_Model_Destroy(DUAL_Model* model) {
+void DUAL_Model_Destroy(void* m) {
+    DUAL_Model* model = (DUAL_Model*)m;
     if (!model) return;
     if (model->meshes) {
         for (uint32_t i = 0; i < model->mesh_count; i++) {
@@ -1019,7 +1019,8 @@ void DUAL_AnimatedModel_Update(DUAL_Animated_Model* anim_model, float dt) {
     Animator_UpdateAnimation(&anim_model->animator, dt);
 }
 
-void DUAL_AnimatedModel_Destroy(DUAL_Animated_Model* anim_model) {
+void DUAL_AnimatedModel_Destroy(void* am) {
+    DUAL_Animated_Model* anim_model = (DUAL_Animated_Model*)am;
     if (!anim_model) return;
     if (anim_model->animations) {
         for (unsigned int i = 0; i < anim_model->animation_count; i++) {
