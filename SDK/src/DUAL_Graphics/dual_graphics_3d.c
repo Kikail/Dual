@@ -194,7 +194,8 @@ static void FreeNodeData(AssimpNodeData* node) {
     free((void*)node->name);
 }
 
-static void FreeAnimation(Animation* anim) {
+static void FreeAnimation(void* a) {
+    Animation* anim = (Animation*)a;
     if (!anim) return;
     for (int i = 0; i < anim->m_NumBones; i++) {
         Bone* bone = &anim->m_Bones[i];
@@ -979,7 +980,7 @@ DUAL_Result DUAL_AnimatedModel_Create(DUAL_ResourceManager* resources, const cha
 
     anim_model->animation_count = scene->mNumAnimations;
     if (anim_model->animation_count > 0) {
-        anim_model->animations = calloc(anim_model->animation_count, sizeof(Animation*));
+        anim_model->animations = Hashtable_CreateEmpty();
         if (!anim_model->animations) {
             aiReleaseImport(scene);
             DUAL_Model_Destroy(anim_model->model);
@@ -987,11 +988,18 @@ DUAL_Result DUAL_AnimatedModel_Create(DUAL_ResourceManager* resources, const cha
             return DUAL_ERROR_OUT_OF_MEMORY;
         }
 
+        Animation* first_anim = NULL;
         for (unsigned int i = 0; i < anim_model->animation_count; i++) {
-            anim_model->animations[i] = BuildAnimation(scene, scene->mAnimations[i], anim_model->model, false);
+            Animation* anim = BuildAnimation(scene, scene->mAnimations[i], anim_model->model, false);
+            const char* raw_name = scene->mAnimations[i]->mName.data;
+            const char* separator = strchr(raw_name, '|');
+            const char* clean_name = (separator != NULL) ? (separator + 1) : raw_name;
+            char* key_copy = strdup(clean_name);
+            Hashtable_Put(anim_model->animations, key_copy, anim);
+            if (!first_anim) first_anim = anim;
         }
 
-        Animator_Init(&anim_model->animator, anim_model->animations[0]);
+        Animator_Init(&anim_model->animator, first_anim);
     } else {
         anim_model->animations = NULL;
         Animator_Init(&anim_model->animator, NULL);
@@ -1007,11 +1015,13 @@ DUAL_Result DUAL_AnimatedModel_Create(DUAL_ResourceManager* resources, const cha
     return DUAL_OK;
 }
 
-void DUAL_AnimatedModel_PlayAnimation(DUAL_Animated_Model* anim_model, unsigned int index) {
-    if (!anim_model || index >= anim_model->animation_count) return;
-    if (anim_model->animations[index]) {
-        Animator_Init(&anim_model->animator, anim_model->animations[index]);
-    }
+void DUAL_AnimatedModel_PlayAnimation(DUAL_Animated_Model* anim_model, const char* anim_name) {
+    if (!anim_model) return;
+
+    Animation* animation = Hashtable_Get(anim_model->animations, anim_name);
+    if (!animation) return;
+
+    Animator_Init(&anim_model->animator, animation);
 }
 
 void DUAL_AnimatedModel_Update(DUAL_Animated_Model* anim_model, float dt) {
@@ -1023,10 +1033,8 @@ void DUAL_AnimatedModel_Destroy(void* am) {
     DUAL_Animated_Model* anim_model = (DUAL_Animated_Model*)am;
     if (!anim_model) return;
     if (anim_model->animations) {
-        for (unsigned int i = 0; i < anim_model->animation_count; i++) {
-            FreeAnimation(anim_model->animations[i]);
-        }
-        free(anim_model->animations);
+        Hashtable_Clean(anim_model->animations, FreeAnimation);
+        Hashtable_Destroy(anim_model->animations);
     }
     if (anim_model->model) {
         DUAL_Model_Destroy(anim_model->model);

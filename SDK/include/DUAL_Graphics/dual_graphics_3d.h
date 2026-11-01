@@ -16,6 +16,7 @@
 #include "../DUAL_Math/dual_math.h"
 #include "../../include/DUAL_Graphics/camera3d.h"
 #include "dual_graphics_2d.h"
+#include "hashtable/hashtable.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -245,7 +246,7 @@ typedef struct Vertex3D{
 
 typedef struct DUAL_Animated_Model{
     DUAL_Model* model;
-    Animation** animations;
+    Hashtable* animations;
     unsigned int animation_count;
     Animator animator;
 
@@ -331,7 +332,7 @@ void DUAL_Debug_Draw_Model_BoundingBox(DUAL_Renderer3D* debug, DUAL_AABB box, DU
 
 
 DUAL_Result DUAL_AnimatedModel_Create(DUAL_ResourceManager* resources, const char* glb_path, DUAL_Animated_Model** out_animated_model);
-void DUAL_AnimatedModel_PlayAnimation(DUAL_Animated_Model* anim_model, unsigned int index);
+void DUAL_AnimatedModel_PlayAnimation(DUAL_Animated_Model* anim_model, const char* anim_name);
 void DUAL_AnimatedModel_Update(DUAL_Animated_Model* anim_model, float dt);
 void DUAL_AnimatedModel_Destroy(void* anim_model);
 

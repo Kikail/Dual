@@ -190,22 +190,16 @@ int main() {
     DUAL_Renderer3D_SetLight(renderer3D, 3, sun);
     DUAL_Renderer3D_SetCullMode(renderer3D, DUAL_CULL_BACK);
 
-
-
     DUAL_ResourceManager* resourceManager = NULL;
     DUAL_ResourceManager_Create(app, &resourceManager);
-
-
 
     game_charger_ressources(resourceManager, &scene);
     DUAL_Texture* texture = NULL;
     DUAL_Texture_LoadFromFile(resourceManager, "/home/killian/CLionProjects/Dual/SDK/internal_resources/textures/gradient-radial.png", DUAL_FILTER_NEAREST, &texture);
 
-
-
     DUAL_Animated_Model* animatedModel = NULL;
     DUAL_AnimatedModel_Create(resourceManager, "/home/killian/Scenes/pistol.fbx", &animatedModel);
-    DUAL_AnimatedModel_PlayAnimation(animatedModel, 1);
+    DUAL_AnimatedModel_PlayAnimation(animatedModel, "Idle");
 
     DUAL_PhysicsWorld* physicsWorld = DUAL_PhysicsWorld_Create((DUAL_Vec3){0.0, -9.81, 0.0});
 
@@ -223,10 +217,7 @@ int main() {
     double oldx = 0, oldy = 0;
     bool firstMouse = false;
 
-
     DUAL_SetScreenClearColor(app, DUAL_SCREEN_MAIN, DUAL_COLOR_BLACK);
-
-
 
     while (DUAL_ShouldRun(app)) {
         DUAL_BeginFrame(app);
@@ -300,12 +291,12 @@ int main() {
         DUAL_Renderer3D_UseShader(renderer3D, SHADER3D_SKELETAL_LIT);
 
         if (DUAL_IsButtonPressed(inputManager, DUAL_BUTTON_MOUSE_LEFT )) {
-            DUAL_AnimatedModel_PlayAnimation(animatedModel, 0);
+            DUAL_AnimatedModel_PlayAnimation(animatedModel, "Fire");
             animatedModel->animator.m_Loop = false;
         }
         DUAL_AnimatedModel_Update(animatedModel, DUAL_GetDeltaTime(app));
         if (animatedModel->animator.m_Finished) {
-            DUAL_AnimatedModel_PlayAnimation(animatedModel, 1);
+            DUAL_AnimatedModel_PlayAnimation(animatedModel, "Idle");
             animatedModel->animator.m_Loop = true;
         }
 
