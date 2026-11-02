@@ -36,31 +36,8 @@ find_package(OpenGL REQUIRED)
 include_directories(${OPUS_INCLUDE_DIRS})
 
 # ========================================================================
-# 1. CONFIGURATION DU MOTEUR (L'exécutable principal)
+# 1. LISTE DES SOURCES DU MOTEUR (Sans le main.c)
 # ========================================================================
-
-set(MOTEUR_SOURCES
-        Jeux/Testing/main.c
-        SDK/src/DUAL_Core/dual_core.c
-        SDK/thirdparty/glad/glad.c
-        SDK/include/dual_internal.h
-        SDK/src/DUAL_Input/dual_input.c
-        SDK/src/DUAL_Math/dual_math.c
-        SDK/src/DUAL_Graphics/dual_graphics_2d.c
-        SDK/src/DUAL_Graphics/dual_graphics_3d.c
-        SDK/src/DUAL_Physics/dual_physics.c
-        SDK/src/DUAL_Graphics/camera3d.c
-        SDK/src/DUAL_Graphics/camera2d.c
-        SDK/src/DUAL_Graphics/particle_system.c
-        SDK/src/DUAL_Graphics/shader.c
-        SDK/src/DUAL_Graphics/dual_ui.c
-        SDK/src/DUAL_Resources/dual_resources.c
-        SDK/src/DUAL_Audio/dual_audio.c
-        SDK/src/DUAL_FS/dual_fs.c
-        SDK/src/DUAL_Editor/dual_scene_loader.c
-        SDK/include/game_api.h
-        SDK/include/dual_utils.h
-)
 
 set(SDK_SOURCES
         SDK/src/DUAL_Core/dual_core.c
@@ -84,61 +61,70 @@ set(SDK_SOURCES
         SDK/include/dual_utils.h
 )
 
-add_executable(Dual ${MOTEUR_SOURCES})
+# ========================================================================
+# 2. GENERATION DE LA BIBLIOTHEQUE DU MOTEUR (libDual.so / Dual)
+# ========================================================================
+
+add_library(Dual SHARED ${SDK_SOURCES})
 
 target_link_options(Dual PRIVATE "-rdynamic")
-target_compile_definitions(Dual PRIVATE ASSETS_DIR="Jeux/Jeu1/assets")
 
-target_include_directories(Dual PRIVATE
+target_include_directories(Dual PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
 )
 
-target_link_libraries(Dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl data_structures)
+target_link_libraries(Dual PRIVATE
+        ${GLFW_LIBRARIES}
+        ${OPUS_LIBRARIES}
+        OpenGL::GL
+        assimp::assimp
+        m
+        pthread
+        dl
+        data_structures
+)
+
+# ========================================================================
+# 3. CONFIGURATION DE L'EXECUTABLE CLIENT (Le jeu / main)
+# ========================================================================
+
+add_executable(DualApp Jeux/Testing/main.c)
+target_compile_definitions(DualApp PRIVATE ASSETS_DIR="Jeux/Jeu1/assets")
+target_include_directories(DualApp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include)
+target_link_libraries(DualApp PRIVATE Dual)
 
 
 # ========================================================================
-# 2. CONFIGURATION DU JEU (La cartouche .so)
+# 4. CONFIGURATION DU JEU (La cartouche .so)
 # ========================================================================
 
 add_library(game SHARED Jeux/Jeu2/game.c)
 target_include_directories(game PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
 )
-target_link_libraries(game PRIVATE data_structures)
+target_link_libraries(game PRIVATE data_structures Dual)
 set_target_properties(game PROPERTIES PREFIX "")
 set(CLE_USB "/home/killian/Desktop/Games/DUAL_FPS_Game")
 add_custom_command(TARGET game POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
         $<TARGET_FILE:game>
         ${CLE_USB}/game.so
-        COMMENT "Copie de game.so vers /home/killian/Desktop/Games/DUAL_FPS_Game ..."
+        COMMENT "Copie de game.so vers ${CLE_USB} ..."
 )
 
 
 # ========================================================================
-# 3. GENERATION DU SDK DYNAMIQUE (libdual.so)
-# ========================================================================
-
-add_library(dual SHARED ${SDK_SOURCES})
-target_include_directories(dual PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
-)
-target_link_libraries(dual PRIVATE ${GLFW_LIBRARIES} ${OPUS_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl data_structures)
-
-
-# ========================================================================
-# TESTS
+# 5. TESTS
 # ========================================================================
 
 macro(add_dual_test test_name source_file)
-    add_executable(${test_name} ${source_file} ${SDK_SOURCES})
+    add_executable(${test_name} ${source_file})
     target_include_directories(${test_name} PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/SDK/include
             ${CMAKE_CURRENT_SOURCE_DIR}/SDK/thirdparty
     )
-    target_link_libraries(${test_name} PRIVATE ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl data_structures)
+    target_link_libraries(${test_name} PRIVATE Dual ${GLFW_LIBRARIES} OpenGL::GL assimp::assimp m pthread dl data_structures)
 endmacro()
 
 add_dual_test(test_core Jeux/Testing/test_core.c)
