@@ -56,7 +56,6 @@ set(SDK_SOURCES
         SDK/src/DUAL_Audio/dual_audio.c
         SDK/src/DUAL_FS/dual_fs.c
         SDK/src/DUAL_Editor/dual_scene_loader.c
-        SDK/include/game_api.h
         SDK/include/dual_utils.h
         SDK/include/DUAL_Core/dual_file.h
         SDK/include/DUAL_Core/dual_enums.h

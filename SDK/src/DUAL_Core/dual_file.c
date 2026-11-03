@@ -77,9 +77,9 @@ void DUAL_File_Pack(const char* filepath, DUAL_File** files, unsigned int file_c
     for (unsigned int i = 0; i < file_count; i++) {
         DUAL_File* file = files[i];
 
-        char name[64] = {0};
+        char name[DUAL_FILE_SIZE_MINIMUM] = {0};
         strncpy(name, file->name, sizeof(name) - 1);
-        fwrite(name, 1, 64, fp);
+        fwrite(name, 1, DUAL_FILE_SIZE_MINIMUM, fp);
 
         fwrite(&file->block_size, sizeof(size_t), 1, fp);
 
@@ -115,8 +115,8 @@ DUAL_VFS_Archive* DUAL_VFS_Init(const char* filepath) {
     }
 
     for (unsigned int i = 0; i < count; i++) {
-        char fname[64] = {0};
-        if (fread(fname, 1, 64, fp) != 64) break;
+        char fname[DUAL_FILE_SIZE_MINIMUM] = {0};
+        if (fread(fname, 1, DUAL_FILE_SIZE_MINIMUM, fp) != DUAL_FILE_SIZE_MINIMUM) break;
         fname[63] = '\0';
         strncpy(archive->files[i].name, fname, sizeof(archive->files[i].name) - 1);
 

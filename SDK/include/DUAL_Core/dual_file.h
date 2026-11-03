@@ -6,8 +6,10 @@
 #define DUAL_DUAL_FILE_H
 #include <stdio.h>
 
+#define DUAL_FILE_SIZE_MINIMUM 128
+
 typedef struct {
-    char name[64];
+    char name[DUAL_FILE_SIZE_MINIMUM];
     size_t size;
     char* data;
 } DUAL_VFS_File;
@@ -18,7 +20,7 @@ typedef struct {
 } DUAL_VFS_Archive;
 
 struct DUAL_File {
-    char name[64];
+    char name[DUAL_FILE_SIZE_MINIMUM];
     char* block;
     size_t block_size;
 };

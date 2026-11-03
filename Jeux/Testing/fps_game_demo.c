@@ -221,6 +221,21 @@ int main() {
 
     DUAL_SetScreenClearColor(app, DUAL_SCREEN_MAIN, DUAL_COLOR_BLACK);
 
+    DUAL_VFS_Archive* archive = DUAL_VFS_Init("/home/killian/Desktop/TestingCode/archive.pak");
+    DUAL_Texture* tex1 = NULL; DUAL_Texture* tex2 = NULL;
+    if (archive) {
+        for(int i = 0; i < archive->file_count; i++){
+            printf("[%d]: %s\n", i, archive->files[i].name);
+        }
+        DUAL_VFS_File* tex_file_1 = DUAL_VFS_GetFile(archive, "/home/killian/Desktop/DUAL_FPS_Game/Assets/Textures/metal_6.png");
+        DUAL_VFS_File* tex_file_2 = DUAL_VFS_GetFile(archive, "/home/killian/Desktop/DUAL_FPS_Game/Assets/Textures/metal_8.png");
+        DUAL_Texture_LoadFromVFS(resourceManager, tex_file_1, DUAL_FILTER_NEAREST, &tex1);
+        DUAL_Texture_LoadFromVFS(resourceManager, tex_file_2, DUAL_FILTER_NEAREST, &tex2);
+    }
+    else {
+        DUAL_Log(DUAL_LOG_ERROR, "Failed to load archive");
+    }
+
     while (DUAL_ShouldRun(app)) {
         DUAL_BeginFrame(app);
 
@@ -309,7 +324,7 @@ int main() {
             transform.echelle = (DUAL_Vec3){0.2, 0.2, 0.2};
             transform.position = renderer3D->lights[i].position;
             DUAL_Color color = {renderer3D->lights[i].couleur.x, renderer3D->lights[i].couleur.y, renderer3D->lights[i].couleur.z, 1.0};
-            DUAL_DrawBillboard(renderer3D, texture, transform, color);
+            DUAL_DrawBillboard(renderer3D, tex2, transform, color);
         }
 
         DUAL_Renderer3D_End(renderer3D);

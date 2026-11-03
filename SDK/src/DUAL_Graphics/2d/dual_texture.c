@@ -4,11 +4,10 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_THREAD_LOCAL
 #include "stb_image.h"
-
 #include "../../SDK/include/DUAL_Graphics/2d/dual_texture.h"
 #include <stdlib.h>
-
 #include "DUAL_Resources/dual_resources.h"
+#include "../../SDK/include/DUAL_Core/dual_file.h"
 
 DUAL_Result DUAL_Texture_LoadFromFile(DUAL_ResourceManager* resources, const char* chemin_fichier, DUAL_TextureFilter filtre, DUAL_Texture** out_texture) {
     int largeur, hauteur, canaux;
@@ -30,6 +29,30 @@ DUAL_Result DUAL_Texture_LoadFromFile(DUAL_ResourceManager* resources, const cha
 
     return resultat;
 }
+
+DUAL_Result DUAL_Texture_LoadFromVFS(DUAL_ResourceManager* resources, DUAL_VFS_File* file, DUAL_TextureFilter filtre, DUAL_Texture** out_texture) {
+    if (!resources || !file || !out_texture) return DUAL_ERROR_INVALID_ARG;
+
+    int largeur, hauteur, canaux;
+
+    stbi_set_flip_vertically_on_load(false);
+    uint8_t* pixels = stbi_load_from_memory(file->data, file->size, &largeur, &hauteur, &canaux, STBI_rgb_alpha);
+
+    if (!pixels) {
+        printf("[ERREUR TEXTURE] Impossible de charger le fichier vfs: %s\n", file->name);
+        return DUAL_ERROR_NOT_FOUND;
+    }
+
+    DUAL_Result resultat = DUAL_Texture_LoadFromMemory(resources, pixels, largeur, hauteur, filtre, out_texture);
+    stbi_image_free(pixels);
+
+    strcpy((*out_texture)->texture_path, file->name);
+    DUAL_GetFilenameWithoutExtension((*out_texture)->texture_path, (*out_texture)->texture_name, 32);
+    DUAL_ResourceManager_AddResource(resources, *out_texture, DUAL_RESOURCE_TEXTURE);
+
+    return resultat;
+}
+
 
 DUAL_Result DUAL_Texture_LoadFromMemory(DUAL_ResourceManager* resources, const uint8_t* pixels, int32_t largeur, int32_t hauteur, DUAL_TextureFilter filtre, DUAL_Texture** out_texture) {
     if (!pixels || !out_texture) return DUAL_ERROR_INVALID_ARG;

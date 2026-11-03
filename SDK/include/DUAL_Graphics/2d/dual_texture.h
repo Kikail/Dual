@@ -11,6 +11,7 @@
 #include "DUAL_Core/dual_enums.h"
 #include "DUAL_Math/dual_math.h"
 #include "dual_graphics_2d.h"
+#include "DUAL_Core/dual_file.h"
 #include "glad/glad.h"
 
 typedef struct DUAL_ResourceManager DUAL_ResourceManager;
@@ -51,6 +52,8 @@ typedef struct DUAL_SpriteParams {
  * @return DUAL_OK en cas de succès, ou un code d'erreur DUAL_Result sinon.
  */
 DUAL_Result DUAL_Texture_LoadFromFile(DUAL_ResourceManager* resources,const char* chemin_fichier,DUAL_TextureFilter filtre,DUAL_Texture** out_texture);
+
+DUAL_Result DUAL_Texture_LoadFromVFS(DUAL_ResourceManager* resources, DUAL_VFS_File* file, DUAL_TextureFilter filtre, DUAL_Texture** out_texture);
 
 /**
  * @brief Charge une texture depuis un buffer mémoire contenant des données
