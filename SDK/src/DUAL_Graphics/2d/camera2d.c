@@ -1,4 +1,4 @@
-#include "../../include/DUAL_Graphics/camera2d.h"
+#include "../../../include/DUAL_Graphics/2d/camera2d.h"
 
 void DUAL_Camera2D_Init(DUAL_Camera2D* camera, DUAL_Vec2 offset) {
     if (!camera) return;

@@ -1,12 +1,10 @@
 #include "../../include/DUAL_Input/dual_input.h"
+#include "../../include/DUAL_Core/dual_core.h"
 #include <GLFW/glfw3.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
 
-
-extern void* DUAL_Internal_GetGLFWWindow(const DUAL_App* app);
-extern void  DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h);
 
 struct DUAL_InputManager {
     GLFWwindow* window;
@@ -38,8 +36,8 @@ DUAL_Result DUAL_InputManager_Create(DUAL_App* app, DUAL_InputManager** out_inpu
     DUAL_InputManager* input = (DUAL_InputManager*)malloc(sizeof(struct DUAL_InputManager));
     if (!input) return DUAL_ERROR_OUT_OF_MEMORY;
 
-    input->window = (GLFWwindow*)DUAL_Internal_GetGLFWWindow(app);
-    DUAL_Internal_GetScreenDimensions(app, &input->largeur_ecran, &input->hauteur_ecran);
+    input->window = (GLFWwindow*)DUAL_GetGLFWWindow(app);
+    DUAL_GetScreenDimensions(app, &input->largeur_ecran, &input->hauteur_ecran);
 
     for (int i = 0; i < DUAL_BUTTON_COUNT; i++) {
         input->current_buttons[i] = false;

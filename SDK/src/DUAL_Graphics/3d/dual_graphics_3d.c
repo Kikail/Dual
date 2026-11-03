@@ -8,19 +8,13 @@
 
 #include <glad/glad.h>
 
-#include "../../include/DUAL_Graphics/dual_graphics_3d.h"
-#include "../../include/DUAL_Graphics/dual_graphics_2d.h"
-#include "../../include/DUAL_Graphics/shader.h"
-#include "../../include/DUAL_Math/dual_math.h"
-#include "../../include/DUAL_Core/dual_core.h"
-#include "../../include/DUAL_Resources/dual_resources.h"
-#include "../../include/dual_utils.h"
-
-
-extern void   DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h);
-extern GLuint DUAL_Internal_GetTextureID(const DUAL_Texture* texture);
-
-
+#include "../../../include/DUAL_Graphics/3d/dual_graphics_3d.h"
+#include "../../../include/DUAL_Graphics/2d/dual_graphics_2d.h"
+#include "../../../include/DUAL_Graphics/shader.h"
+#include "../../../include/DUAL_Math/dual_math.h"
+#include "../../../include/DUAL_Core/dual_core.h"
+#include "../../../include/DUAL_Resources/dual_resources.h"
+#include "../../../include/dual_utils.h"
 
 #define LIGHT_UNIFORMS(i) { \
     "uLights[" #i "].type", "uLights[" #i "].position", "uLights[" #i "].direction", \
@@ -599,7 +593,7 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     renderer->plan_lointain = 500.0f;
 
     int32_t w = 0, h = 0;
-    DUAL_Internal_GetScreenDimensions(renderer->app, &w, &h);
+    DUAL_GetScreenDimensions(renderer->app, &w, &h);
     float aspect = (h != 0) ? ((float)w / (float)h) : 1.0f;
     float demi_h = renderer->ortho_demi_hauteur;
     float demi_w = demi_h * aspect;
@@ -632,9 +626,9 @@ DUAL_Result DUAL_Renderer3D_Create(DUAL_App* app, DUAL_Renderer3D** out_renderer
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
-    DUAL_Renderer3D_UseShader(renderer, SHADER3D_SHADER_DEBUG);
+    DUAL_Renderer3D_UseShader(renderer, DUAL_SHADER3D_SHADER_DEBUG);
     DUAL_Shader_setVec3(renderer->current_shader, "uColor", (DUAL_Vec3){1.0f, 1.0f, 1.0f});
-    DUAL_Renderer3D_UseShader(renderer, SHADER3D_LIT);
+    DUAL_Renderer3D_UseShader(renderer, DUAL_SHADER3D_LIT);
 
     *out_renderer = renderer;
     return DUAL_OK;
@@ -761,7 +755,7 @@ void DUAL_DrawAnimatedModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, 
         if (mesh->material_index < model->material_count) {
             const DUAL_Material* material = materials[mesh->material_index];
             if (material && material->texture_diffuse) {
-                texture = DUAL_Internal_GetTextureID(material->texture_diffuse);
+                texture = DUAL_Texture_GetTextureID(material->texture_diffuse);
             }
         }
 
@@ -788,7 +782,7 @@ void DUAL_DrawBillboard(DUAL_Renderer3D* renderer, const DUAL_Texture* texture, 
     glDepthMask(GL_FALSE);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, DUAL_Internal_GetTextureID(texture));
+    glBindTexture(GL_TEXTURE_2D, DUAL_Texture_GetTextureID(texture));
     glUniform1i(glGetUniformLocation(shader->shaderID, "texture_diffuse"), 0);
 
     DUAL_Shader_setMat4(shader, "uVP", DUAL_Mat4_Multiply(renderer->perspective_projection, DUAL_Camera3D_GetViewMatrix(&renderer->camera)));
@@ -831,19 +825,19 @@ void DUAL_DrawModel(DUAL_Renderer3D* renderer, const DUAL_Model* model, const DU
 void DUAL_Renderer3D_UseShader(DUAL_Renderer3D* renderer, DUAL_Renderer3d_Shaders shader) {
     if (!renderer) return;
     switch (shader) {
-        case SHADER3D_LIT:
+        case DUAL_SHADER3D_LIT:
             renderer->current_shader = &renderer->shaders.shader_lit;
             break;
-        case SHADER3D_UNLIT:
+        case DUAL_SHADER3D_UNLIT:
             renderer->current_shader = &renderer->shaders.shader_unlit;
             break;
-        case SHADER3D_SKELETAL_LIT:
+        case DUAL_SHADER3D_SKELETAL_LIT:
             renderer->current_shader = &renderer->shaders.shader_skeleton;
             break;
-        case SHADER3D_SKELETAL_UNLIT:
+        case DUAL_SHADER3D_SKELETAL_UNLIT:
             renderer->current_shader = &renderer->shaders.shader_skeleton_unlit;
             break;
-        case SHADER3D_SHADER_DEBUG:
+        case DUAL_SHADER3D_SHADER_DEBUG:
             renderer->current_shader = &renderer->shaders.shader_debug;
             break;
         default:

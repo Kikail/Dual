@@ -11,17 +11,9 @@
 
 #include "../DUAL_Physics/dual_physics.h"
 #include "../DUAL_Math/dual_math.h"
-#include "../DUAL_Graphics/dual_graphics_3d.h"
+#include "../DUAL_Graphics/3d/dual_graphics_3d.h"
+#include "../DUAL_Core/dual_enums.h"
 #include "dynamic-array/dynamic-array.h"
-
-// Ajouter du contenu dans cette enum pour ajouter des nouveaux composants pour les entity
-// Une entity peut etre que de un seul type pour faciliter la manipulation
-typedef enum DUAL_Editor_EntityType {
-    NONE,
-    MODEL,
-    COLLISION,
-    STRUCT
-}DUAL_Editor_EntityType;
 
 // Cette structure contient les infos necessaire au chargement d'un modele 3D dans la scene
 typedef struct DUAL_Editor_ModelData {
@@ -83,28 +75,28 @@ buffer_offset += sizeof(type);
 
 // FONCTIONS
 // Debug
-void print_buffer_hex(const char* buffer, unsigned int size);
-void afficher_type(DUAL_Editor_EntityType type);
-void afficher_ModelData(DUAL_Editor_ModelData data);
-void afficher_CollisionData(DUAL_Editor_CollisionData data);
-void afficher_StructData(DUAL_Editor_StructData data);
-void afficher_entite(DUAL_Editor_SceneEntity* entity);
-void afficher_scene(DUAL_Editor_Scene* scene);
+void DUAL_Editor_Print_Buffer_Hex(const char* buffer, unsigned int size);
+void DUAL_Editor_Afficher_Type(DUAL_Editor_EntityType type);
+void DUAL_Editor_Afficher_ModelData(DUAL_Editor_ModelData data);
+void DUAL_Editor_Afficher_CollisionData(DUAL_Editor_CollisionData data);
+void DUAL_Editor_Afficher_StructData(DUAL_Editor_StructData data);
+void DUAL_Editor_Afficher_Entity(DUAL_Editor_SceneEntity* entity);
+void DUAL_Editor_Afficher_Scene(DUAL_Editor_Scene* scene);
 
 
 // Sauvegarde et Chargement
-void sauvegarder_entite(DUAL_Editor_SceneEntity* entity, char* buffer, unsigned int* buffer_offset);
-void sauvegarder_scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buffer_offset);
-DUAL_Editor_SceneEntity* charger_entite(char* buffer, unsigned int* buffer_offset);
-void charger_scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buffer_offset);
-size_t entity_getTotalSize(DUAL_Editor_SceneEntity* entity);
-size_t scene_getTotalSize(DUAL_Editor_Scene* scene);
+void DUAL_Editor_Sauvegarder_Entity(DUAL_Editor_SceneEntity* entity, char* buffer, unsigned int* buffer_offset);
+void DUAL_Editor_Sauvegarder_Scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buffer_offset);
+DUAL_Editor_SceneEntity* DUAL_Editor_Charger_Entity(char* buffer, unsigned int* buffer_offset);
+void DUAL_Editor_Charger_Scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buffer_offset);
+size_t DUAL_Editor_Entity_GetTotalSize(DUAL_Editor_SceneEntity* entity);
+size_t DUAL_Editor_Scene_GetTotalSize(DUAL_Editor_Scene* scene);
 
 // Creation de Entity pour la Scene
-DUAL_Editor_SceneEntity* createEntity(DUAL_Editor_EntityType type, DUAL_Transform3D transform3_d, const char* name, void* blockData);
-DUAL_Editor_SceneEntity* getEntity(DUAL_Editor_Scene* scene, unsigned int index);
-void addEntity(DUAL_Editor_Scene* scene,DUAL_Editor_SceneEntity* entity);
-void removeEntity(DUAL_Editor_Scene* scene, DUAL_Editor_SceneEntity* entity);
+DUAL_Editor_SceneEntity* DUAL_Editor_CreateEntity(DUAL_Editor_EntityType type, DUAL_Transform3D transform3_d, const char* name, void* blockData);
+DUAL_Editor_SceneEntity* DUAL_Editor_GetEntity(DUAL_Editor_Scene* scene, unsigned int index);
+void DUAL_Editor_AddEntity(DUAL_Editor_Scene* scene,DUAL_Editor_SceneEntity* entity);
+void DUAL_Editor_RemoveEntity(DUAL_Editor_Scene* scene, DUAL_Editor_SceneEntity* entity);
 
 
 

@@ -7,14 +7,14 @@
 #include <time.h>
 
 #include "../../SDK/include/DUAL_Core/dual_core.h"
-#include "../../SDK/include/DUAL_Graphics/dual_graphics_3d.h"
-#include "../../SDK/include/DUAL_Graphics/dual_graphics_2d.h"
+#include "../../SDK/include/DUAL_Graphics/3d/dual_graphics_3d.h"
+#include "../../SDK/include/DUAL_Graphics/2d/dual_graphics_2d.h"
 #include "../../SDK/include/DUAL_Input/dual_input.h"
 #include "../../SDK/include/DUAL_Resources/dual_resources.h"
 #include "dual_utils.h"
 #include "../../SDK/include/DUAL_Graphics/shader.h"
-#include "DUAL_Graphics/camera3d.h"
-#include "DUAL_Graphics/particle_system.h"
+#include "../../SDK/include/DUAL_Graphics/3d/camera3d.h"
+#include "../../SDK/include/DUAL_Graphics/3d/particle_system.h"
 #include "DUAL_Physics/dual_physics.h"
 
 #define MODEL_FIRETRUCK_PATH "/home/killian/Projects/C/Dual/Jeux/resources/3D/cars/OBJ format/firetruck.obj"

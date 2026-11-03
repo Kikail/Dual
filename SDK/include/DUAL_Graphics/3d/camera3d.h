@@ -5,7 +5,8 @@
 #ifndef DUAL_CAMERA3D_H
 #define DUAL_CAMERA3D_H
 
-#include "../DUAL_Math/dual_math.h"
+#include "../../DUAL_Math/dual_math.h"
+#include "../../DUAL_Core/dual_enums.h"
 
 #define DUAL_VECTOR_UP (DUAL_Vec3){0.0,1.0,0.0}
 #define DUAL_VECTOR_DOWN (DUAL_Vec3){0.0,-1.0,0.0}
@@ -17,13 +18,6 @@
 #define DUAL_CAMERA_SPEED (10.0)
 #define DUAL_CAMERA_SENSIVITY (0.1f)
 #define DUAL_CAMERA_ZOOM (45.0)
-
-typedef enum CameraMovement {
-    FORWARD,
-    BACKWARD,
-    LEFT,
-    RIGHT
-}CameraMovement;
 
 typedef struct DUAL_Camera3D {
     DUAL_Vec3 position;

@@ -11,7 +11,7 @@
 /// Debuging
 //////////////////////////////////////////////////////////////
 
-void print_buffer_hex(const char* buffer, unsigned int size) {
+void DUAL_Editor_Print_Buffer_Hex(const char* buffer, unsigned int size) {
     printf("Buffer hex (%u octets) : \t", size);
     for (unsigned int i = 0; i < size; i++) {
         printf("%02X ", (unsigned char)buffer[i]);
@@ -19,28 +19,28 @@ void print_buffer_hex(const char* buffer, unsigned int size) {
     printf("\n");
 }
 
-void afficher_type(DUAL_Editor_EntityType type) {
+void DUAL_Editor_Afficher_Type(DUAL_Editor_EntityType type) {
     switch (type) {
-        case NONE:
+        case DUAL_ENTITY_TYPE_NONE:
             printf("NONE");
             break;
-        case MODEL:
+        case DUAL_ENTITY_TYPE_MODEL:
             printf("MODEL");
             break;
-        case COLLISION:
+        case DUAL_ENTITY_TYPE_COLLISION:
             printf("COLLISION");
             break;
-        case STRUCT:
+        case DUAL_ENTITY_TYPE_STRUCT:
             printf("STRUCT");
             break;
     }
 }
 
-void afficher_ModelData(DUAL_Editor_ModelData data) {
+void DUAL_Editor_Afficher_ModelData(DUAL_Editor_ModelData data) {
     printf("\t\tModelData:{name:%s, path:%s}\n", data.name, data.path);
 }
 
-void afficher_CollisionData(DUAL_Editor_CollisionData data) {
+void DUAL_Editor_Afficher_CollisionData(DUAL_Editor_CollisionData data) {
     printf("\t\t");
     switch (data.type) {
         case DUAL_COLLIDER_AABB:
@@ -54,42 +54,42 @@ void afficher_CollisionData(DUAL_Editor_CollisionData data) {
     }
 }
 
-void afficher_StructData(DUAL_Editor_StructData data) {
+void DUAL_Editor_Afficher_StructData(DUAL_Editor_StructData data) {
     printf("\t\tStructData:{targetname:%s, script_string:%s, script_noteworthy:%s}\n", data.targetname, data.script_string, data.script_noteworthy);
 }
 
-void afficher_entite(DUAL_Editor_SceneEntity* entity) {
+void DUAL_Editor_Afficher_Entity(DUAL_Editor_SceneEntity* entity) {
     printf("\t-Entity{type:");
-    afficher_type(entity->type);
+    DUAL_Editor_Afficher_Type(entity->type);
     printf(", position:(%f, %f, %f), name:%s, id:%u, blocksize:%u}\n", entity->transform.position.x, entity->transform.position.y, entity->transform.position.z, entity->name, entity->id, entity->blockSize);
     switch (entity->type) {
-        case MODEL:
+        case DUAL_ENTITY_TYPE_MODEL:
             DUAL_Editor_ModelData model; unsigned int offset = 0;
             GET_DATA_BUFFER(&model, DUAL_Editor_ModelData, entity->block, offset);
-            afficher_ModelData(model);
+            DUAL_Editor_Afficher_ModelData(model);
             break;
-        case COLLISION:
+        case DUAL_ENTITY_TYPE_COLLISION:
             DUAL_Editor_CollisionData collision; unsigned int offsetcol = 0;
             GET_DATA_BUFFER(&collision, DUAL_Editor_CollisionData, entity->block, offsetcol);
-            afficher_CollisionData(collision);
+            DUAL_Editor_Afficher_CollisionData(collision);
             break;
-        case STRUCT:
+        case DUAL_ENTITY_TYPE_STRUCT:
             DUAL_Editor_StructData structData; unsigned int offsetstruct = 0;
             GET_DATA_BUFFER(&structData, DUAL_Editor_StructData, entity->block, offsetstruct);
-            afficher_StructData(structData);
+            DUAL_Editor_Afficher_StructData(structData);
             break;
-        case NONE:
+        case DUAL_ENTITY_TYPE_NONE:
             break;
     }
 }
 
-void afficher_scene(DUAL_Editor_Scene* scene) {
+void DUAL_Editor_Afficher_Scene(DUAL_Editor_Scene* scene) {
     if (scene == NULL) return;
     printf("Scene(%u entities):\n",scene->numEntities);
     for (int i = 0; i < scene->entities->size; i++) {
         DUAL_Editor_SceneEntity* entity = DynamicArray_Get(scene->entities, i);
         if (entity == NULL) continue;
-        afficher_entite(entity);
+        DUAL_Editor_Afficher_Entity(entity);
     }
 }
 
@@ -98,7 +98,7 @@ void afficher_scene(DUAL_Editor_Scene* scene) {
 //////////////////////////////////////////////////////////////
 
 
-DUAL_Editor_SceneEntity* createEntity(DUAL_Editor_EntityType type, DUAL_Transform3D transform3_d, const char* name, void* blockData) {
+DUAL_Editor_SceneEntity* DUAL_Editor_CreateEntity(DUAL_Editor_EntityType type, DUAL_Transform3D transform3_d, const char* name, void* blockData) {
     // Allocation de l'entité sur le tas (heap)
     DUAL_Editor_SceneEntity* entity = malloc(sizeof(DUAL_Editor_SceneEntity));
     if (!entity) return NULL;
@@ -110,25 +110,25 @@ DUAL_Editor_SceneEntity* createEntity(DUAL_Editor_EntityType type, DUAL_Transfor
     entity->blockSize = 0;
 
     switch (type) {
-        case NONE:
+        case DUAL_ENTITY_TYPE_NONE:
             entity->block = NULL;
             entity->data_ptr = NULL;
             break;
-        case MODEL: {
+        case DUAL_ENTITY_TYPE_MODEL: {
             DUAL_Editor_ModelData* model_data = (DUAL_Editor_ModelData*)blockData;
             entity->block = malloc(sizeof(DUAL_Editor_ModelData));
             WRITE_DATA_BUFFER(*model_data, DUAL_Editor_ModelData, entity->block, entity->blockSize);
             entity->data_ptr = blockData;
             break;
         }
-        case COLLISION: {
+        case DUAL_ENTITY_TYPE_COLLISION: {
             DUAL_Editor_CollisionData* col_data = (DUAL_Editor_CollisionData*)blockData;
             entity->block = malloc(sizeof(DUAL_Editor_CollisionData));
             WRITE_DATA_BUFFER(*col_data, DUAL_Editor_CollisionData, entity->block, entity->blockSize);
             entity->data_ptr = blockData;
             break;
         }
-        case STRUCT: {
+        case DUAL_ENTITY_TYPE_STRUCT: {
             DUAL_Editor_StructData* struct_data = (DUAL_Editor_StructData*)blockData;
             entity->block = malloc(sizeof(DUAL_Editor_StructData));
             WRITE_DATA_BUFFER(*struct_data, DUAL_Editor_StructData, entity->block, entity->blockSize);
@@ -139,12 +139,12 @@ DUAL_Editor_SceneEntity* createEntity(DUAL_Editor_EntityType type, DUAL_Transfor
     return entity;
 }
 
-DUAL_Editor_SceneEntity* getEntity(DUAL_Editor_Scene* scene, unsigned int index) {
+DUAL_Editor_SceneEntity* DUAL_Editor_GetEntity(DUAL_Editor_Scene* scene, unsigned int index) {
     return DynamicArray_Get(scene->entities, index);
 }
 
 
-void addEntity(DUAL_Editor_Scene* scene,DUAL_Editor_SceneEntity* entity) {
+void DUAL_Editor_AddEntity(DUAL_Editor_Scene* scene,DUAL_Editor_SceneEntity* entity) {
     DynamicArray_Put(scene->entities, entity);
     scene->numEntities += 1;
 }
@@ -153,7 +153,7 @@ void addEntity(DUAL_Editor_Scene* scene,DUAL_Editor_SceneEntity* entity) {
 /// Sauvegarde de la scene et des entities
 //////////////////////////////////////////////////////////////
 
-void sauvegarder_entite(DUAL_Editor_SceneEntity* entity, char* buffer, unsigned int* buffer_offset) {
+void DUAL_Editor_Sauvegarder_Entity(DUAL_Editor_SceneEntity* entity, char* buffer, unsigned int* buffer_offset) {
     if (entity == NULL) {
         DUAL_Log(DUAL_LOG_ERROR, "Entity is null");
         return;
@@ -167,14 +167,14 @@ void sauvegarder_entite(DUAL_Editor_SceneEntity* entity, char* buffer, unsigned 
     memcpy(buffer + *buffer_offset, entity->block, entity->blockSize); *buffer_offset += entity->blockSize;
 }
 
-void sauvegarder_scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buffer_offset) {
-    print_buffer_hex(buffer, *buffer_offset);
+void DUAL_Editor_Sauvegarder_Scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buffer_offset) {
+    DUAL_Editor_Print_Buffer_Hex(buffer, *buffer_offset);
     memcpy(buffer, &scene->numEntities, sizeof(unsigned int)); *buffer_offset += 4;
-    print_buffer_hex(buffer, *buffer_offset);
+    DUAL_Editor_Print_Buffer_Hex(buffer, *buffer_offset);
     for (int i = 0; i < scene->entities->size; i++) {
         DUAL_Editor_SceneEntity* entity = DynamicArray_Get(scene->entities, i);
-        sauvegarder_entite(entity, buffer, buffer_offset);
-        print_buffer_hex(buffer, *buffer_offset);
+        DUAL_Editor_Sauvegarder_Entity(entity, buffer, buffer_offset);
+        DUAL_Editor_Print_Buffer_Hex(buffer, *buffer_offset);
     }
 }
 
@@ -182,7 +182,7 @@ void sauvegarder_scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buf
 /// Chargement de la scene et des entities
 //////////////////////////////////////////////////////////////
 
-DUAL_Editor_SceneEntity* charger_entite(char* buffer, unsigned int* buffer_offset) {
+DUAL_Editor_SceneEntity* DUAL_Editor_Charger_Entity(char* buffer, unsigned int* buffer_offset) {
     DUAL_Editor_SceneEntity* entity = malloc(sizeof(DUAL_Editor_SceneEntity));
     memcpy(&entity->type, buffer + *buffer_offset, sizeof(DUAL_Editor_EntityType)); *buffer_offset += sizeof(DUAL_Editor_EntityType);
     memcpy(&entity->transform, buffer + *buffer_offset, sizeof(DUAL_Transform3D)); *buffer_offset += sizeof(DUAL_Transform3D);
@@ -194,14 +194,14 @@ DUAL_Editor_SceneEntity* charger_entite(char* buffer, unsigned int* buffer_offse
     return entity;
 }
 
-void charger_scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buffer_offset) {
+void DUAL_Editor_Charger_Scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buffer_offset) {
     if (scene == NULL || buffer == NULL || buffer_offset == NULL) return;
 
     memcpy(&scene->numEntities, buffer + *buffer_offset, sizeof(unsigned int)); *buffer_offset += sizeof(unsigned int);
     scene->entities = DynamicArray_CreateEmptyWithCapacity(64);
 
     for (unsigned int i = 0; i < scene->numEntities; i++) {
-        DynamicArray_Put(scene->entities, charger_entite(buffer, buffer_offset));
+        DynamicArray_Put(scene->entities, DUAL_Editor_Charger_Entity(buffer, buffer_offset));
     }
 }
 
@@ -210,7 +210,7 @@ void charger_scene(DUAL_Editor_Scene* scene, char* buffer, unsigned int* buffer_
 //////////////////////////////////////////////////////////////
 
 
-size_t entity_getTotalSize(DUAL_Editor_SceneEntity* entity) {
+size_t DUAL_Editor_Entity_GetTotalSize(DUAL_Editor_SceneEntity* entity) {
     size_t size = 0;
     size += sizeof(DUAL_Editor_EntityType);
     size += sizeof(DUAL_Transform3D);
@@ -221,15 +221,15 @@ size_t entity_getTotalSize(DUAL_Editor_SceneEntity* entity) {
     return size;
 }
 
-size_t scene_getTotalSize(DUAL_Editor_Scene* scene) {
+size_t DUAL_Editor_Scene_GetTotalSize(DUAL_Editor_Scene* scene) {
     size_t total = sizeof(unsigned int);
     for (int i = 0; i < scene->entities->size; i++) {
         DUAL_Editor_SceneEntity* entity = DynamicArray_Get(scene->entities, i);
-        total += entity_getTotalSize(entity);
+        total += DUAL_Editor_Entity_GetTotalSize(entity);
     }
     return total;
 }
-void removeEntity(DUAL_Editor_Scene* scene, DUAL_Editor_SceneEntity* entity) {
+void DUAL_Editor_RemoveEntity(DUAL_Editor_Scene* scene, DUAL_Editor_SceneEntity* entity) {
     if (scene == NULL || entity == NULL) return;
 
     unsigned int i = 0;

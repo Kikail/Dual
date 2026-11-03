@@ -6,31 +6,6 @@
 
 #include "../../include/DUAL_Math/dual_math.h"
 
-/* ============================================================================
- * Définition de la structure opaque (Invisible pour le dev final)
- * ========================================================================== */
-typedef struct DUAL_App {
-    GLFWwindow* window;
-    int32_t     largeur_ecran;
-    int32_t     hauteur_ecran;
-    bool        should_close;
-
-    double      time_current;
-    double      time_previous;
-    double      delta_time;
-
-    double      fps_timer;
-    int32_t     fps_counter;
-    int32_t     fps_current;
-
-    DUAL_ScreenLayout layout;
-    DUAL_Color clear_colors[2];
-}DUAL_App;
-
-/* ============================================================================
- * Cycle de vie de l'application
- * ========================================================================== */
-
 DUAL_Result DUAL_Init(const DUAL_AppConfig* config, DUAL_App** out_app) {
     if (!config || !out_app) {
         return DUAL_ERROR_INVALID_ARG;
@@ -136,10 +111,6 @@ void DUAL_RequestExit(DUAL_App* app) {
     }
 }
 
-/* ============================================================================
- * Boucle de rendu / frame
- * ========================================================================== */
-
 void DUAL_BeginFrame(DUAL_App* app) {
     if (!app) return;
 
@@ -227,10 +198,6 @@ void DUAL_SetScreenClearColor(DUAL_App* app,DUAL_ScreenID screenId, DUAL_Color c
     else app->clear_colors[0] = clearColor;
 }
 
-/* ============================================================================
- * Timing
- * ========================================================================== */
-
 double DUAL_GetDeltaTime(const DUAL_App* app) {
     return app ? app->delta_time : 0.0;
 }
@@ -242,10 +209,6 @@ double DUAL_GetTime(const DUAL_App* app) {
 int32_t DUAL_GetFPS(const DUAL_App* app) {
     return app ? app->fps_current : 0;
 }
-
-/* ============================================================================
- * Logging
- * ========================================================================== */
 
 void DUAL_Log(DUAL_LogLevel niveau, const char* format, ...) {
     const char* prefix = "[INFO]";
@@ -270,57 +233,15 @@ GLFWwindow* DUAL_GetWindow(const DUAL_App* app) {
     return app ? app->window : NULL;
 }
 
-/* ============================================================================
- * Utility
- * ========================================================================== */
-
-void* DUAL_Internal_GetGLFWWindow(const DUAL_App* app) {
+void* DUAL_GetGLFWWindow(const DUAL_App* app) {
     return app ? app->window : NULL;
 }
 
-void DUAL_Internal_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h) {
+void DUAL_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h) {
     if (app) {
         if (out_w) *out_w = app->largeur_ecran;
         if (out_h) *out_h = app->hauteur_ecran;
     }
-}
-
-/* ============================================================================
- *  Utility
- * ========================================================================== */
-
-DUAL_Result DUAL_LoadFile(const char* filename, char* buffer, size_t buffer_size) {
-    if (!buffer || !filename || buffer_size == 0) return DUAL_ERROR_INVALID_ARG;
-
-    memset(buffer, 0, buffer_size);
-
-    FILE* fileptr = fopen(filename, "rb"); // Mode binaire 'rb' indispensable
-    if (!fileptr) return DUAL_ERROR_NOT_FOUND;
-
-    size_t bytes_read = fread(buffer, 1, buffer_size - 1, fileptr);
-    buffer[bytes_read] = '\0'; // Garantit la fin de chaîne
-
-    fclose(fileptr);
-    return DUAL_OK;
-}
-
-DUAL_Result DUAL_GetFileSize(char* filename, uint64_t* out_taille_octets) {
-    if (!filename || !out_taille_octets) return DUAL_ERROR_INVALID_ARG;
-
-    FILE* handle = fopen(filename, "rb");
-    long position_actuelle = ftell(handle);
-    if (position_actuelle < 0) return DUAL_ERROR_UNKNOWN;
-
-    if (fseek(handle, 0, SEEK_END) != 0) return DUAL_ERROR_UNKNOWN;
-
-    long taille = ftell(handle);
-    if (taille < 0) return DUAL_ERROR_UNKNOWN;
-
-    /* On restaure la position de lecture/écriture d'origine. */
-    fseek(handle, position_actuelle, SEEK_SET);
-
-    *out_taille_octets = (uint64_t)taille;
-    return DUAL_OK;
 }
 
 DUAL_ScreenLayout DUAL_GetScreenLayout(const DUAL_App* app) {

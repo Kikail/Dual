@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "../DUAL_Core/dual_core.h"
+#include "../DUAL_Core/dual_enums.h"
 #include "hashtable/hashtable.h"
 
 #ifdef __cplusplus
@@ -50,37 +51,6 @@ typedef struct DUAL_ResourceManager{
     Hashtable* sound_collection;
     Hashtable* font_collection;
 }DUAL_ResourceManager;
-
-/* ============================================================================
- *  Enumérations
- * ========================================================================== */
-
-/**
- * @brief Catégorie de mémoire ciblée par une allocation.
- */
-typedef enum DUAL_MemoryType {
-    DUAL_MEMORY_VRAM = 0, /**< Mémoire vidéo : textures, buffers de modèles 3D. */
-    DUAL_MEMORY_RAM  = 1  /**< Mémoire système : sons, données de jeu génériques. */
-} DUAL_MemoryType;
-
-/**
- * @brief Catégorie fonctionnelle d'une ressource suivie, utilisée pour le
- *        reporting et le déchargement sélectif.
- */
-typedef enum DUAL_ResourceCategory {
-    DUAL_RESOURCE_TEXTURE           = 0, /**< Texture 2D ou spritesheet. */
-    DUAL_RESOURCE_MODEL_3D          = 1, /**< Modèle 3D (géométrie, OBJ importé). */
-    DUAL_RESOURCE_SOUND             = 2, /**< Son chargé intégralement en mémoire. */
-    DUAL_RESOURCE_MUSIC             = 3, /**< Flux musical en streaming. */
-    DUAL_RESOURCE_STRUCT            = 4, /**< Structure personnalisee comme par exemple un personnage. */
-    DUAL_RESOURCE_ANIMATED_MODEL    = 5,
-    DUAL_RESOURCE_FONT              = 6,
-    DUAL_RESOURCE_AUTRE             = 7  /**< Ressource générique non catégorisée. */
-} DUAL_ResourceCategory;
-
-/* ============================================================================
- *  Structures
- * ========================================================================== */
 
 /**
  * @brief Statistiques globales d'utilisation mémoire à un instant donné.
@@ -188,7 +158,6 @@ void DUAL_ResourceManager_AddSound(DUAL_ResourceManager* manager, DUAL_Sound* re
 void DUAL_ResourceManager_AddFont(DUAL_ResourceManager* manager, DUAL_Font* resource_ptr);
 void DUAL_ResourceManager_AddResource(DUAL_ResourceManager* manager, void* resource_ptr, DUAL_ResourceCategory resource_type);
 void DUAL_GetFilenameWithoutExtension(const char* filepath, char* output_buffer, size_t buffer_size);
-
 void* DUAL_ResourceManager_GetTexture(DUAL_ResourceManager* resource_manager, char* resource_name);
 void* DUAL_ResourceManager_GetModel(DUAL_ResourceManager* resource_manager, char* resource_name);
 void* DUAL_ResourceManager_GetAnimatedModel(DUAL_ResourceManager* resource_manager, char* resource_name);

@@ -4,7 +4,7 @@
 
 #include "../../include/DUAL_Graphics/shader.h"
 #include "../../include/DUAL_Core/dual_core.h"
-#include "../../include/DUAL_Graphics/dual_graphics_3d.h"
+#include "../../include/DUAL_Graphics/3d/dual_graphics_3d.h"
 
 
 #include <string.h>

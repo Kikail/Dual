@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "game_api.h" // Obligatoire pour la structure GameAPI
 #include "DUAL_Core/dual_core.h"
-#include "DUAL_Graphics/dual_graphics_3d.h"
+#include "../../SDK/include/DUAL_Graphics/3d/dual_graphics_3d.h"
 
 
 void my_init(INCLUDES_FONCTIONS) {

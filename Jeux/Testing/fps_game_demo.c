@@ -6,6 +6,7 @@
 #include "../../SDK/include/DUAL_FS/dual_fs.h"
 #include "../../SDK/include/DUAL_Resources/dual_resources.h"
 #include "../../SDK/include/dual_utils.h"
+#include "../../SDK/include/DUAL_Core/dual_file.h"
 #include "DUAL_Input/dual_input.h"
 
 void game_charger_scene(char* filepath, DUAL_Editor_Scene* output) {
@@ -14,8 +15,8 @@ void game_charger_scene(char* filepath, DUAL_Editor_Scene* output) {
     char new_buffer[filesize]; memset(new_buffer, 0, filesize);
     DUAL_LoadFile(filepath, new_buffer, filesize);
     unsigned int buffer_offset_scene = 0;
-    charger_scene(output, new_buffer, &buffer_offset_scene);
-    afficher_scene(output);
+    DUAL_Editor_Charger_Scene(output, new_buffer, &buffer_offset_scene);
+    DUAL_Editor_Afficher_Scene(output);
 }
 
 DUAL_RigidBody create_collision(DUAL_Vec3 position, DUAL_AABB aabb) {
@@ -49,11 +50,11 @@ DUAL_RigidBody create_player_body(DUAL_Vec3 position) {
 
 void game_charger_collisions(DUAL_PhysicsWorld* physicsWorld, DUAL_Editor_Scene* scene) {
     for (int i = 0; i < scene->numEntities; i++) {
-        DUAL_Editor_SceneEntity* entity = getEntity(scene, i);
-        if (entity->type == COLLISION) {
+        DUAL_Editor_SceneEntity* entity = DUAL_Editor_GetEntity(scene, i);
+        if (entity->type == DUAL_ENTITY_TYPE_COLLISION) {
             DUAL_Editor_CollisionData collision; unsigned int offsetcol = 0;
             GET_DATA_BUFFER(&collision, DUAL_Editor_CollisionData, entity->block, offsetcol);
-            afficher_CollisionData(collision);
+            DUAL_Editor_Afficher_CollisionData(collision);
             DUAL_PhysicsWorld_AddBody(physicsWorld, create_collision(entity->transform.position, collision.CollisionDataInfo.aabb));
         }
     }
@@ -62,7 +63,7 @@ void game_charger_collisions(DUAL_PhysicsWorld* physicsWorld, DUAL_Editor_Scene*
 DUAL_Editor_SceneEntity structs_entities[16]; unsigned int current_structs = 0;
 DUAL_Editor_SceneEntity* game_get_struct_entity(char* targetname, DUAL_Editor_StructData* out_struct_data) {
     for (int i = 0; i < current_structs; i++) {
-        if (structs_entities[i].type == STRUCT) {
+        if (structs_entities[i].type == DUAL_ENTITY_TYPE_STRUCT) {
             DUAL_Editor_StructData structData; unsigned int offsetstruct = 0;
             GET_DATA_BUFFER(&structData, DUAL_Editor_StructData, structs_entities[i].block, offsetstruct);
             if (strcmp(structData.targetname, targetname) == 0) {
@@ -76,8 +77,8 @@ DUAL_Editor_SceneEntity* game_get_struct_entity(char* targetname, DUAL_Editor_St
 
 void game_charger_ressources(DUAL_ResourceManager* resource_manager, DUAL_Editor_Scene* scene) {
     for (int i = 0; i < scene->numEntities; i++) {
-        DUAL_Editor_SceneEntity* entity = getEntity(scene, i);
-        if (entity->type == MODEL) {
+        DUAL_Editor_SceneEntity* entity = DUAL_Editor_GetEntity(scene, i);
+        if (entity->type == DUAL_ENTITY_TYPE_MODEL) {
             DUAL_Editor_ModelData model; unsigned int offset = 0;
             GET_DATA_BUFFER(&model, DUAL_Editor_ModelData, entity->block, offset);
             DUAL_Log(DUAL_LOG_INFO, "%d - loading: %s ...", i, model.path);
@@ -86,7 +87,7 @@ void game_charger_ressources(DUAL_ResourceManager* resource_manager, DUAL_Editor
 
             DUAL_Model_Load(resource_manager, model.path, &model3D, &nb_mats, &mats);
         }
-        if (entity->type == STRUCT) {
+        if (entity->type == DUAL_ENTITY_TYPE_STRUCT) {
             if (current_structs < 16) {
                 structs_entities[current_structs] = *entity;
                 current_structs++;
@@ -249,8 +250,8 @@ int main() {
         DUAL_Renderer3D_Begin(renderer3D);
 
         for (int i = 0; i < scene.numEntities; i++) {
-            DUAL_Editor_SceneEntity* entity = getEntity(&scene, i);
-            if (entity->type == MODEL) {
+            DUAL_Editor_SceneEntity* entity = DUAL_Editor_GetEntity(&scene, i);
+            if (entity->type == DUAL_ENTITY_TYPE_MODEL) {
                 DUAL_Editor_ModelData modelData; unsigned int offset = 0;
                 GET_DATA_BUFFER(&modelData, DUAL_Editor_ModelData, entity->block, offset);
 
@@ -288,7 +289,7 @@ int main() {
         };
         wpn_transform.echelle = (DUAL_Vec3){ 0.01f, 0.01f, 0.01f };
 
-        DUAL_Renderer3D_UseShader(renderer3D, SHADER3D_SKELETAL_LIT);
+        DUAL_Renderer3D_UseShader(renderer3D, DUAL_SHADER3D_SKELETAL_LIT);
 
         if (DUAL_IsButtonPressed(inputManager, DUAL_BUTTON_MOUSE_LEFT )) {
             DUAL_AnimatedModel_PlayAnimation(animatedModel, "Fire");

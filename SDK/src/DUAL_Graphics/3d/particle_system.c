@@ -1,7 +1,7 @@
 //
 // Created by killian on 8/24/26.
 //
-#include "../../include/DUAL_Graphics/particle_system.h"
+#include "../../../include/DUAL_Graphics/3d/particle_system.h"
 
 #include <math.h>
 #include <stdlib.h>

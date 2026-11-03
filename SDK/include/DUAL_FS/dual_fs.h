@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "../DUAL_Core/dual_core.h"
+#include "../DUAL_Core/dual_enums.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,28 +52,6 @@ typedef struct DUAL_SaveFile DUAL_SaveFile;
  *        insérée dans la console.
  */
 typedef struct DUAL_Cartridge DUAL_Cartridge;
-
-/* ============================================================================
- *  Enumérations
- * ========================================================================== */
-
-/**
- * @brief Mode d'ouverture d'un fichier de sauvegarde.
- */
-typedef enum DUAL_SaveMode {
-    DUAL_SAVE_MODE_LECTURE           = 0, /**< Ouverture en lecture seule. */
-    DUAL_SAVE_MODE_ECRITURE          = 1, /**< Ouverture en écriture, écrase le contenu existant (de façon atomique, voir note du fichier). */
-    DUAL_SAVE_MODE_LECTURE_ECRITURE  = 2  /**< Ouverture en lecture et écriture, en préservant le contenu existant. */
-} DUAL_SaveMode;
-
-/**
- * @brief État de présence et de validité de la cartouche physique.
- */
-typedef enum DUAL_CartridgeStatus {
-    DUAL_CARTRIDGE_ABSENTE     = 0, /**< Aucune cartouche détectée dans le lecteur. */
-    DUAL_CARTRIDGE_VALIDE      = 1, /**< Cartouche détectée et lisible. */
-    DUAL_CARTRIDGE_CORROMPUE   = 2  /**< Cartouche détectée mais données illisibles ou invalides. */
-} DUAL_CartridgeStatus;
 
 /* ============================================================================
  *  Structures

@@ -21,102 +21,31 @@
 #include <GLFW/glfw3.h>
 
 #include "../DUAL_Math/dual_math.h"
+#include "dual_color.h"
+#include "dual_enums.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* ============================================================================
- *  Types opaques
- * ========================================================================== */
 
-/**
- * @brief Représente le contexte global de l'application (fenêtre, écrans, GLFW).
- *
- * Ce type est opaque : sa structure interne (handle GLFWwindow*, framebuffers
- * OpenGL des deux écrans, etc.) n'est jamais exposée au développeur final.
- */
-typedef struct DUAL_App DUAL_App;
+typedef struct DUAL_App {
+    GLFWwindow* window;
+    int32_t     largeur_ecran;
+    int32_t     hauteur_ecran;
+    bool        should_close;
 
-/**
- * @brief Couleur RGBA avec composantes flottantes normalisées entre 0.0 et 1.0.
- */
-typedef struct DUAL_Color {
-    float r; /**< Composante rouge, entre 0.0 et 1.0. */
-    float g; /**< Composante verte, entre 0.0 et 1.0. */
-    float b; /**< Composante bleue, entre 0.0 et 1.0. */
-    float a; /**< Composante alpha (opacité), entre 0.0 et 1.0. */
-} DUAL_Color;
+    double      time_current;
+    double      time_previous;
+    double      delta_time;
 
-#define DUAL_COLOR_RED (DUAL_Color){1.0, 0.0, 0.0, 1.0}
-#define DUAL_COLOR_GREEN (DUAL_Color){0.0, 1.0, 0.0, 1.0}
-#define DUAL_COLOR_BLUE (DUAL_Color){0.0, 0.0, 1.0, 1.0}
-#define DUAL_COLOR_BLUE2 (DUAL_Color){0.1, 0.1, 0.75, 1.0}
-#define DUAL_COLOR_YELLOW (DUAL_Color){1.0, 1.0, 0.0, 1.0}
-#define DUAL_COLOR_MAGENTA (DUAL_Color){1.0, 0.0, 1.0, 1.0}
-#define DUAL_COLOR_CYAN (DUAL_Color){0.0, 1.0, 1.0, 1.0}
-#define DUAL_COLOR_WHITE (DUAL_Color){1.0, 1.0, 1.0, 1.0}
-#define DUAL_COLOR_BLACK (DUAL_Color){0.0, 0.0, 0.0, 1.0}
+    double      fps_timer;
+    int32_t     fps_counter;
+    int32_t     fps_current;
 
-#define DUAL_VEC3_COLOR_RED (DUAL_Vec3){1.0, 0.0, 0.0}
-#define DUAL_VEC3_COLOR_GREEN (DUAL_Vec3){0.0, 1.0, 0.0}
-#define DUAL_VEC3_COLOR_BLUE (DUAL_Vec3){0.0, 0.0, 1.0}
-#define DUAL_VEC3_COLOR_YELLOW (DUAL_Vec3){1.0, 1.0, 0.0}
-#define DUAL_VEC3_COLOR_MAGENTA (DUAL_Vec3){1.0, 0.0, 1.0}
-#define DUAL_VEC3_COLOR_CYAN (DUAL_Vec3){0.0, 1.0, 1.0}
-#define DUAL_VEC3_COLOR_WHITE (DUAL_Vec3){1.0, 1.0, 1.0}
-#define DUAL_VEC3_COLOR_BLACK (DUAL_Vec3){0.0, 0.0, 0.0}
-
-/* ============================================================================
- *  Enumérations
- * ========================================================================== */
-
-/**
- * @brief Identifie l'un des deux écrans physiques de la console.
- */
-typedef enum DUAL_ScreenID {
-    DUAL_SCREEN_TOP    = 0, /**< Écran supérieur (généralement utilisé pour le rendu principal). */
-    DUAL_SCREEN_BOTTOM = 1, /**< Écran inférieur (généralement tactile, utilisé pour l'UI/HUD). */
-    DUAL_SCREEN_RIGHT   = 2, /**< Écran Droit (généralement utilisé pour le rendu principal). */
-    DUAL_SCREEN_LEFT  = 3, /**< Écran Gauche (généralement tactile, utilisé pour l'UI/HUD). */
-    DUAL_SCREEN_MAIN  = 4,
-    DUAL_SCREEN_COUNT  = 5  /**< Nombre total d'écrans gérés par la console. */
-} DUAL_ScreenID;
-
-/**
- * @brief Codes de retour standards utilisés à travers toute l'API libdual.
- */
-typedef enum DUAL_Result {
-    DUAL_OK                  =  0, /**< Opération réussie. */
-    DUAL_ERROR_UNKNOWN       = -1, /**< Erreur non spécifiée. */
-    DUAL_ERROR_INIT_FAILED   = -2, /**< Échec d'initialisation de GLFW, OpenGL ou du matériel. */
-    DUAL_ERROR_INVALID_ARG   = -3, /**< Argument invalide passé à une fonction de l'API. */
-    DUAL_ERROR_OUT_OF_MEMORY = -4, /**< Allocation mémoire échouée. */
-    DUAL_ERROR_NOT_FOUND     = -5  /**< Ressource ou fichier introuvable. */
-} DUAL_Result;
-
-/**
- * @brief Niveaux de sévérité utilisés par le système de log interne de libdual.
- */
-typedef enum DUAL_LogLevel {
-    DUAL_LOG_DEBUG   = 0, /**< Informations de débogage détaillées. */
-    DUAL_LOG_INFO    = 1, /**< Informations générales sur le déroulement de l'application. */
-    DUAL_LOG_WARNING = 2, /**< Avertissement n'empêchant pas l'exécution. */
-    DUAL_LOG_ERROR   = 3  /**< Erreur critique nécessitant l'attention du développeur. */
-} DUAL_LogLevel;
-
-/**
- * @brief Disposition de l'ecran dans dual.
- */
-typedef enum DUAL_ScreenLayout {
-    DUAL_LAYOUT_HORIZONTAL_SPLIT,
-    DUAL_LAYOUT_VERTICAL_SPLIT,
-    DUAL_LAYOUT_NO_SPLIT
-}DUAL_ScreenLayout;
-
-/* ============================================================================
- *  Structures de configuration
- * ========================================================================== */
+    DUAL_ScreenLayout layout;
+    DUAL_Color clear_colors[2];
+}DUAL_App;
 
 /**
  * @brief Paramètres d'initialisation de l'application libdual.
@@ -135,10 +64,6 @@ typedef struct DUAL_AppConfig {
     bool        vsync_actif;            /**< Si vrai, active la synchronisation verticale. */
     int32_t     fps_cible;              /**< Fréquence d'images par seconde cible (0 = illimité). */
 } DUAL_AppConfig;
-
-/* ============================================================================
- *  Cycle de vie de l'application
- * ========================================================================== */
 
 /**
  * @brief Initialise libdual, ouvre la fenêtre/le contexte graphique et prépare les deux écrans.
@@ -180,10 +105,6 @@ bool DUAL_ShouldRun(const DUAL_App* app);
  * @param app Instance de l'application.
  */
 void DUAL_RequestExit(DUAL_App* app);
-
-/* ============================================================================
- *  Boucle de rendu / frame
- * ========================================================================== */
 
 /**
  * @brief Démarre une nouvelle frame logique et de rendu.
@@ -231,10 +152,6 @@ void DUAL_EndFrame(DUAL_App* app);
  */
 void DUAL_SetScreenClearColor(DUAL_App* app,DUAL_ScreenID screenId, DUAL_Color clearColor);
 
-/* ============================================================================
- *  Timing
- * ========================================================================== */
-
 /**
  * @brief Retourne le temps écoulé depuis la frame précédente, en secondes.
  *
@@ -270,10 +187,6 @@ int32_t DUAL_GetFPS(const DUAL_App* app);
  */
 GLFWwindow* DUAL_GetWindow(const DUAL_App* app);
 
-/* ============================================================================
- *  Logging
- * ========================================================================== */
-
 /**
  * @brief Émet un message dans le journal interne de libdual.
  *
@@ -286,13 +199,12 @@ GLFWwindow* DUAL_GetWindow(const DUAL_App* app);
  */
 void DUAL_Log(DUAL_LogLevel niveau, const char* format, ...);
 
-/* ============================================================================
- *  Utility
- * ========================================================================== */
 
-DUAL_Result DUAL_LoadFile(const char* filename, char* buffer, size_t buffer_size);
-DUAL_Result DUAL_GetFileSize(char* filename, uint64_t* out_taille_octets);
 DUAL_ScreenLayout DUAL_GetScreenLayout(const DUAL_App* app);
+
+void* DUAL_GetGLFWWindow(const DUAL_App* app);
+
+void  DUAL_GetScreenDimensions(const DUAL_App* app, int32_t* out_w, int32_t* out_h);
 
 #ifdef __cplusplus
 }

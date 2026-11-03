@@ -5,9 +5,11 @@
 
 
 #include "DUAL_Audio/dual_audio.h"
-#include "DUAL_Graphics/dual_graphics_2d.h"
-#include "DUAL_Graphics/dual_graphics_3d.h"
-
+#include "../../include/DUAL_Graphics/2d/dual_graphics_2d.h"
+#include "../../include/DUAL_Graphics/2d/dual_font.h"
+#include "../../include/DUAL_Graphics/3d/dual_graphics_3d.h"
+#include "DUAL_Graphics/2d/dual_font.h"
+#include "DUAL_Graphics/2d/dual_texture.h"
 
 
 DUAL_Result DUAL_ResourceManager_InitHashTables(DUAL_ResourceManager* resource_manager) {

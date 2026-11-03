@@ -12,10 +12,11 @@
 #include <assimp/cimport.h>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-#include "../DUAL_Core/dual_core.h"
-#include "../DUAL_Math/dual_math.h"
-#include "../../include/DUAL_Graphics/camera3d.h"
-#include "dual_graphics_2d.h"
+#include "../../DUAL_Core/dual_core.h"
+#include "../../DUAL_Core/dual_enums.h"
+#include "../../DUAL_Math/dual_math.h"
+#include "camera3d.h"
+#include "../2d/dual_graphics_2d.h"
 #include "hashtable/hashtable.h"
 
 #ifdef __cplusplus
@@ -92,32 +93,6 @@ typedef struct AssimpNodeData {
     int childrenCount;
     struct AssimpNodeData* children;
 }AssimpNodeData;
-
-
-typedef enum DUAL_Renderer3d_Shaders {
-    SHADER3D_LIT,
-    SHADER3D_UNLIT,
-    SHADER3D_SKELETAL_LIT,
-    SHADER3D_SKELETAL_UNLIT,
-    SHADER3D_SHADER_DEBUG
-}DUAL_Renderer3d_Shaders;
-
-typedef enum DUAL_ProjectionMode3D {
-    DUAL_PROJECTION_PERSPECTIVE  = 0,
-    DUAL_PROJECTION_ORTHOGRAPHIC = 1
-} DUAL_ProjectionMode3D;
-
-typedef enum DUAL_CullMode {
-    DUAL_CULL_BACK  = 0,
-    DUAL_CULL_FRONT = 1,
-    DUAL_CULL_NONE  = 2
-} DUAL_CullMode;
-
-typedef enum DUAL_RenderMode3D {
-    DUAL_RENDER_LIT       = 0,
-    DUAL_RENDER_UNLIT     = 1,
-    DUAL_RENDER_WIREFRAME = 2
-} DUAL_RenderMode3D;
 
 typedef struct LineVertex{
     DUAL_Vec3 position;

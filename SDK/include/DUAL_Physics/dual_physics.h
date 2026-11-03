@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "../DUAL_Math/dual_math.h"
+#include "../DUAL_Core/dual_enums.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -23,14 +24,6 @@ typedef struct {
     DUAL_Vec3 echelle;     // Échelle du terrain (ex: 1.0m entre chaque point, hauteur max)
     DUAL_Vec3 origine;     // Position du coin bas-gauche du terrain dans le monde
 } DUAL_Heightmap;
-
-// Types de colliders gérés par le moteur
-typedef enum {
-    DUAL_COLLIDER_NONE = 0,
-    DUAL_COLLIDER_AABB,
-    DUAL_COLLIDER_SPHERE,
-    DUAL_COLLIDER_CAPSULE
-} DUAL_ColliderType;
 
 typedef struct {
     DUAL_ColliderType type;

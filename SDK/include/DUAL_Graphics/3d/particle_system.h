@@ -5,7 +5,7 @@
 #ifndef DUAL_PARTICLE_SYSTEM_H
 #define DUAL_PARTICLE_SYSTEM_H
 
-#include "../DUAL_Math/dual_math.h"
+#include "../../DUAL_Math/dual_math.h"
 #include "DUAL_Core/dual_core.h"
 
 typedef struct Particle {

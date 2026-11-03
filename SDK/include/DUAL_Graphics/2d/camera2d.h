@@ -1,7 +1,7 @@
 #ifndef DUAL_CAMERA_2D_H
 #define DUAL_CAMERA_2D_H
 
-#include "../DUAL_Math/dual_math.h"
+#include "../../DUAL_Math/dual_math.h"
 
 typedef struct DUAL_Camera2D{
     DUAL_Vec2 position;

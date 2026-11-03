@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "../DUAL_Core/dual_core.h"
+#include "../DUAL_Core/dual_enums.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -60,17 +61,6 @@ typedef struct {
     bool initialized;
     bool boucle;
 }DUAL_Music;
-
-/* ============================================================================
- * Enumérations
- * ========================================================================== */
-
-typedef enum DUAL_AudioChannel {
-    DUAL_CHANNEL_MASTER = 0,
-    DUAL_CHANNEL_SFX    = 1,
-    DUAL_CHANNEL_MUSIC  = 2,
-    DUAL_CHANNEL_VOICE  = 3
-} DUAL_AudioChannel;
 
 /* ============================================================================
  * Cycle de vie du gestionnaire audio

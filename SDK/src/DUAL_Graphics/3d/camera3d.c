@@ -1,7 +1,7 @@
 //
 // Created by killian on 3/14/26.
 //
-#include "../../include/DUAL_Graphics/camera3d.h"
+#include "../../../include/DUAL_Graphics/3d/camera3d.h"
 
 #include <math.h>
 
@@ -24,13 +24,13 @@ DUAL_Mat4 DUAL_Camera3D_GetViewMatrix(DUAL_Camera3D* cam){
 }
 void DUAL_Camera3D_ProcessKeyboard(DUAL_Camera3D* cam, CameraMovement direction, float deltaTime){
     float velocity = cam->movementSpeed * deltaTime;
-    if (direction == FORWARD)
+    if (direction == CAMERA_MOVEMENT_FORWARD)
         cam->position = DUAL_Vec3_Add(cam->position, DUAL_Vec3_Scale(cam->front, velocity));
-    if (direction == BACKWARD)
+    if (direction == CAMERA_MOVEMENT_BACKWARD)
         cam->position = DUAL_Vec3_Sub(cam->position, DUAL_Vec3_Scale(cam->front, velocity));
-    if (direction == LEFT)
+    if (direction == CAMERA_MOVEMENT_LEFT)
         cam->position =  DUAL_Vec3_Sub(cam->position, DUAL_Vec3_Scale(cam->right, velocity));
-    if (direction == RIGHT)
+    if (direction == CAMERA_MOVEMENT_RIGHT)
         cam->position = DUAL_Vec3_Add(cam->position, DUAL_Vec3_Scale(cam->right, velocity));
 }
 void DUAL_Camera3D_ProcessMouseMovement(DUAL_Camera3D* cam, float xoffset, float yoffset){

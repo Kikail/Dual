@@ -6,10 +6,10 @@
 #include <stdlib.h>
 
 #include "../../SDK/include/DUAL_Core/dual_core.h"
-#include "../../SDK/include/DUAL_Graphics/dual_graphics_2d.h"
+#include "../../SDK/include/DUAL_Graphics/2d/dual_graphics_2d.h"
 #include "../../SDK/include/DUAL_Resources/dual_resources.h"
 #include "../../SDK/include/dual_utils.h"
-#include "../../SDK/include/DUAL_Graphics/camera2d.h"
+#include "../../SDK/include/DUAL_Graphics/2d/camera2d.h"
 
 // Macro pour simuler notre image de chat de 128x128 en RGBA8
 #define IMAGE_WIDTH  128

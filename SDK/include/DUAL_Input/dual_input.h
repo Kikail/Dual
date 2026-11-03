@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "../DUAL_Core/dual_core.h"
+#include "../DUAL_Core/dual_enums.h"
 #include "../DUAL_Math/dual_math.h"
 
 #ifdef __cplusplus
@@ -29,63 +30,6 @@ extern "C" {
  *        des états des boutons, joysticks et écran tactile.
  */
 typedef struct DUAL_InputManager DUAL_InputManager;
-
-/* ============================================================================
- *  Enumérations
- * ========================================================================== */
-
-/**
- * @brief Identifie chacun des boutons physiques de la console.
- */
-typedef enum DUAL_Button {
-    DUAL_BUTTON_A          = 0,  /**< Bouton d'action principal A. */
-    DUAL_BUTTON_B          = 1,  /**< Bouton d'action secondaire B. */
-    DUAL_BUTTON_X          = 2,  /**< Bouton d'action X. */
-    DUAL_BUTTON_Y          = 3,  /**< Bouton d'action Y. */
-    DUAL_BUTTON_L          = 4,  /**< Gâchette/épaule gauche. */
-    DUAL_BUTTON_R          = 5,  /**< Gâchette/épaule droite. */
-    DUAL_BUTTON_START      = 6,  /**< Bouton de démarrage / menu pause. */
-    DUAL_BUTTON_SELECT     = 7,  /**< Bouton de sélection / menu secondaire. */
-    DUAL_BUTTON_UP         = 8,  /**< Direction haut de la croix directionnelle. */
-    DUAL_BUTTON_DOWN       = 9,  /**< Direction bas de la croix directionnelle. */
-    DUAL_BUTTON_LEFT       = 10, /**< Direction gauche de la croix directionnelle. */
-    DUAL_BUTTON_RIGHT      = 11, /**< Direction droite de la croix directionnelle. */
-    DUAL_BUTTON_KEYBOARD_W = 12,
-    DUAL_BUTTON_KEYBOARD_A = 13,
-    DUAL_BUTTON_KEYBOARD_S = 14,
-    DUAL_BUTTON_KEYBOARD_D = 15,
-    DUAL_BUTTON_KEYBOARD_SPACE = 16,
-    DUAL_BUTTON_KEYBOARD_ESCAPE = 17,
-    DUAL_BUTTON_MOUSE_LEFT = 18,
-    DUAL_BUTTON_MOUSE_RIGHT = 19,
-    DUAL_BUTTON_COUNT      = 20,  /**< Nombre total de boutons physiques gérés. */
-} DUAL_Button;
-
-/**
- * @brief Identifie le joystick analogique interrogé.
- *
- * @note La majorité des modèles de console cible n'exposent qu'un seul stick
- *       analogique ; cette énumération anticipe les variantes matérielles à deux sticks.
- */
-typedef enum DUAL_JoystickID {
-    DUAL_JOYSTICK_PRINCIPAL = 0, /**< Joystick analogique principal. */
-    DUAL_JOYSTICK_COUNT     = 1  /**< Nombre total de joysticks gérés par le matériel cible. */
-} DUAL_JoystickID;
-
-/**
- * @brief Phase d'un contact tactile sur l'écran inférieur.
- */
-typedef enum DUAL_TouchPhase {
-    DUAL_TOUCH_NONE     = 0, /**< Aucun contact tactile en cours. */
-    DUAL_TOUCH_STARTED  = 1, /**< Le contact vient de débuter sur cette frame. */
-    DUAL_TOUCH_MOVED    = 2, /**< Le contact est maintenu et sa position a changé. */
-    DUAL_TOUCH_HELD     = 3, /**< Le contact est maintenu, position inchangée depuis la dernière frame. */
-    DUAL_TOUCH_ENDED    = 4  /**< Le contact vient de se terminer sur cette frame. */
-} DUAL_TouchPhase;
-
-/* ============================================================================
- *  Structures
- * ========================================================================== */
 
 /**
  * @brief État courant d'un contact tactile sur l'écran inférieur.

@@ -42,23 +42,31 @@ include_directories(${OPUS_INCLUDE_DIRS})
 set(SDK_SOURCES
         SDK/src/DUAL_Core/dual_core.c
         SDK/thirdparty/glad/glad.c
-        SDK/include/dual_internal.h
         SDK/src/DUAL_Input/dual_input.c
         SDK/src/DUAL_Math/dual_math.c
-        SDK/src/DUAL_Graphics/dual_graphics_2d.c
-        SDK/src/DUAL_Graphics/dual_graphics_3d.c
+        SDK/src/DUAL_Graphics/2d/dual_graphics_2d.c
+        SDK/src/DUAL_Graphics/3d/dual_graphics_3d.c
         SDK/src/DUAL_Physics/dual_physics.c
-        SDK/src/DUAL_Graphics/camera3d.c
-        SDK/src/DUAL_Graphics/camera2d.c
-        SDK/src/DUAL_Graphics/particle_system.c
+        SDK/src/DUAL_Graphics/3d/camera3d.c
+        SDK/src/DUAL_Graphics/2d/camera2d.c
+        SDK/src/DUAL_Graphics/3d/particle_system.c
         SDK/src/DUAL_Graphics/shader.c
-        SDK/src/DUAL_Graphics/dual_ui.c
+        SDK/src/DUAL_Graphics/2d/dual_ui.c
         SDK/src/DUAL_Resources/dual_resources.c
         SDK/src/DUAL_Audio/dual_audio.c
         SDK/src/DUAL_FS/dual_fs.c
         SDK/src/DUAL_Editor/dual_scene_loader.c
         SDK/include/game_api.h
         SDK/include/dual_utils.h
+        SDK/include/DUAL_Core/dual_file.h
+        SDK/include/DUAL_Core/dual_enums.h
+        SDK/include/DUAL_Core/dual_color.h
+        SDK/src/DUAL_Core/dual_color.c
+        SDK/src/DUAL_Core/dual_file.c
+        SDK/include/DUAL_Graphics/2d/dual_texture.h
+        SDK/src/DUAL_Graphics/2d/dual_texture.c
+        SDK/src/DUAL_Graphics/2d/dual_font.c
+        SDK/include/DUAL_Graphics/2d/dual_font.h
 )
 
 # ========================================================================

@@ -8,11 +8,7 @@
 #include <stdbool.h>
 #include "../DUAL_Math/dual_math.h"
 #include "DUAL_Core/dual_core.h"
-
-typedef enum DUAL_ShaderRender {
-    DUAL_SHADER_LIT       = 0,
-    DUAL_SHADER_UNLIT     = 1,
-} DUAL_ShaderRender;
+#include "DUAL_Core/dual_enums.h"
 
 typedef struct DUAL_Shader {
     unsigned int shaderID;
