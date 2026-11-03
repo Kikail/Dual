@@ -7,6 +7,7 @@
 #include "../../SDK/include/DUAL_Resources/dual_resources.h"
 #include "../../SDK/include/dual_utils.h"
 #include "../../SDK/include/DUAL_Core/dual_file.h"
+#include "DUAL_Graphics/3d/dual_model.h"
 #include "DUAL_Input/dual_input.h"
 
 void game_charger_scene(char* filepath, DUAL_Editor_Scene* output) {

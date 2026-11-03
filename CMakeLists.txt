@@ -67,6 +67,8 @@ set(SDK_SOURCES
         SDK/src/DUAL_Graphics/2d/dual_texture.c
         SDK/src/DUAL_Graphics/2d/dual_font.c
         SDK/include/DUAL_Graphics/2d/dual_font.h
+        SDK/include/DUAL_Graphics/3d/dual_model.h
+        SDK/src/DUAL_Graphics/3d/dual_model.c
 )
 
 # ========================================================================

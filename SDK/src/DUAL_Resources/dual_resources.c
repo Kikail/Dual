@@ -10,6 +10,7 @@
 #include "../../include/DUAL_Graphics/3d/dual_graphics_3d.h"
 #include "DUAL_Graphics/2d/dual_font.h"
 #include "DUAL_Graphics/2d/dual_texture.h"
+#include "DUAL_Graphics/3d/dual_model.h"
 
 
 DUAL_Result DUAL_ResourceManager_InitHashTables(DUAL_ResourceManager* resource_manager) {
