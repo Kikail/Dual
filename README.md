@@ -16,7 +16,7 @@ Dans ce projet, je cherche à montrer comment fonctionnent les moteurs graphique
 
 ## Architecture et Modules (Du plus simple au plus complexe)
 
-### 1. Tampon de Texte (`Text Buffer`) — *Le plus simple*
+### 1. Tampon de Texte (`Text Buffer`)
 ![Text Buffer](https://github.com/user-attachments/assets/d5022dab-c3e0-489d-8887-0f1c2e788c1e)
 
 * **Ce que c'est :** Une interface textuelle interactive de base permettant de taper du texte au clavier et de l'afficher dynamiquement à l'écran.
@@ -27,7 +27,7 @@ Dans ce projet, je cherche à montrer comment fonctionnent les moteurs graphique
 
 ---
 
-### 2. Jeu Flappy Bird — *Complexité Légère (Logique 2D)*
+### 2. Jeu Flappy Bird
 ![Flappy Bird](https://github.com/user-attachments/assets/d966fe86-3068-4041-a12a-a4a5378c6c94)
 
 * **Ce que c'est :** Un mini-jeu complet en 2D intégré pour tester la boucle de jeu, la gestion du temps (`Delta Time`) et les interactions de base.
@@ -38,7 +38,7 @@ Dans ce projet, je cherche à montrer comment fonctionnent les moteurs graphique
 
 ---
 
-### 3. Système de Particules — *Complexité Moyenne (Effets visuels)*
+### 3. Système de Particules
 ![Particle System](https://github.com/user-attachments/assets/c08b4ee5-04a4-4494-bf3a-cb5a2853ccc3)
 
 * **Ce que c'est :** Un générateur d'effets visuels dynamiques en temps réel (fumée, étincelles, explosions).
@@ -49,7 +49,7 @@ Dans ce projet, je cherche à montrer comment fonctionnent les moteurs graphique
 
 ---
 
-### 4. Moteur Physique — *Complexité Avancée*
+### 4. Moteur Physique
 ![Physics](https://github.com/user-attachments/assets/b8b3a56c-9a3b-4f55-b421-e93df9601305)
 
 * **Ce que c'est :** Un monde physique minimaliste gérant la gravité, les corps rigides (`DUAL_RigidBody`) et la résolution de collisions par boîtes englobantes (`AABB`).
@@ -60,7 +60,7 @@ Dans ce projet, je cherche à montrer comment fonctionnent les moteurs graphique
 
 ---
 
-### 5. Chargement de Scène 3D — *Le plus complexe*
+### 5. Chargement de Scène 3D
 ![Scene 3D](https://github.com/user-attachments/assets/a6d6de71-2b78-4856-875d-3146a2df1a6e)
 
 * **Ce que c'est :** Un système complet de sérialisation et de rendu 3D capable d'analyser un fichier de scène personnalisé (`.dual`) pour instancier des décors, des lumières, des collisions et des modèles 3D complexes texturés ou animés.
